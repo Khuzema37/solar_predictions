@@ -242,8 +242,7 @@
             
             try {
                 // Fetch daily forecast (using ECMWF model for stability during presentations)
-                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto&models=ecmwf_ifs04`;
-                
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto`;                
                 const response = await fetch(weatherUrl);
                 if (!response.ok) throw new Error("Weather API failed");
                 
