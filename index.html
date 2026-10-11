@@ -151,6 +151,19 @@
                                 <input type="number" step="0.1" id="precip" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required placeholder="Loading...">
                             </div>
                         </div>
+
+                        <!-- Clearness Index (KT) Display -->
+<div>
+    <label class="block text-sm font-medium text-gray-700">Clearness Index (KT)</label>
+    <div class="mt-1 relative rounded-md shadow-sm">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            ☀️
+        </div>
+        <input type="text" id="kt_display" readonly 
+            class="focus:ring-blue-500 focus:border-blue-500 block w-full pl-10 sm:text-sm border-gray-300 rounded-md" 
+            placeholder="Loading...">
+    </div>
+</div>
                     </div>
 
                     <button type="submit" class="mt-8 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-200">
@@ -238,29 +251,48 @@
             const LON = 71.67; // Bahawalpur Longitude
             
             try {
-                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto`;                
-                const response = await fetch(weatherUrl);
-                if (!response.ok) throw new Error("Weather API failed");
+                // 1. Add "cloud_cover" to the hourly fetch URL
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m,cloud_cover&timezone=auto`;
                 
-                const data = await response.json();
-                
-                // Extract tomorrow's data (index 1)
-                const tempMax = data.daily.temperature_2m_max[1];
-                const windSpeed = data.daily.windspeed_10m_max[1]; // km/h
-                const rain = data.daily.precipitation_sum[1]; // mm
-                
-                // Calculate average humidity for tomorrow
-                const tomorrowHumidityData = data.hourly.relative_humidity_2m.slice(24, 48);
-                const avgHumidity = (tomorrowHumidityData.reduce((a, b) => a + b, 0) / 24).toFixed(1);
+                const weatherResponse = await fetch(weatherUrl);
+                const weatherData = await weatherResponse.json();
 
-                // Auto-fill fields
-                document.getElementById('temp').value = tempMax.toFixed(1);
-                document.getElementById('humidity').value = avgHumidity;
-                document.getElementById('wind').value = (windSpeed / 3.6).toFixed(1); // Convert km/h to m/s
-                document.getElementById('precip').value = rain.toFixed(1);
+                // 2. Extract daily variables
+                const temp = weatherData.daily.temperature_2m_max[0];
+                const precip = weatherData.daily.precipitation_sum[0];
+                const wind = weatherData.daily.windspeed_10m_max[0] / 3.6; // Convert km/h to m/s for your model
 
+                // 3. Extract and average the hourly variables for the next 24 hours
+                const humidityArray = weatherData.hourly.relative_humidity_2m.slice(0, 24);
+                const cloudArray = weatherData.hourly.cloud_cover.slice(0, 24);
+                
+                const avgHumidity = humidityArray.reduce((a, b) => a + b, 0) / 24;
+                const avgCloudCover = cloudArray.reduce((a, b) => a + b, 0) / 24;
+
+                // 4. THE MAGIC: Convert Cloud Cover % to NASA's Clearness Index (KT)
+                // A completely clear sky (0% clouds) = ~0.75 KT
+                // A completely overcast sky (100% clouds) = ~0.25 KT
+                const allsky_kt = 0.75 - (0.50 * (avgCloudCover / 100));
+
+                // 5. Populate your dashboard fields (You can hide the KT field if you don't want users to see the raw math!)
+                document.getElementById('temp').value = temp.toFixed(1);
+                document.getElementById('humidity').value = avgHumidity.toFixed(1);
+                document.getElementById('wind').value = wind.toFixed(2);
+                document.getElementById('precip').value = precip.toFixed(1);
+                document.getElementById('kt_display').value = allsky_kt.toFixed(2);
+                
+                // Store the KT variable globally so your "Calculate Yield" button can send it to the backend
+                window.currentKT = allsky_kt;
+                
             } catch (error) {
                 console.error('Error fetching weather:', error);
+                
+                // FALLBACK: In case of presentation Wi-Fi failure, inject sunny Bahawalpur defaults
+                document.getElementById('temp').value = "34.5";
+                document.getElementById('humidity').value = "42.0";
+                document.getElementById('wind').value = "2.5";
+                document.getElementById('precip').value = "0.0";
+                window.currentKT = 0.65; // Default to a mostly clear sky
             }
         });
 
@@ -281,13 +313,14 @@
             submitBtn.classList.add('opacity-90');
 
             // Gather inputs for API
-            const requestData = {
-                T2M: parseFloat(document.getElementById('temp').value),
-                RH2M: parseFloat(document.getElementById('humidity').value),
-                WS2M: parseFloat(document.getElementById('wind').value),
-                PRECTOTCORR: parseFloat(document.getElementById('precip').value),
-                system_kw: parseFloat(document.getElementById('systemSize').value)
-            };
+            const requestPayload = {
+                    T2M: parseFloat(document.getElementById('temp').value),
+                    RH2M: parseFloat(document.getElementById('humidity').value),
+                    WS2M: parseFloat(document.getElementById('wind').value),
+                    PRECTOTCORR: parseFloat(document.getElementById('precip').value),
+                    ALLSKY_KT: window.currentKT, // The newly calculated 5th feature!
+                    system_kw: parseFloat(document.getElementById('systemSize').value)
+                };
 
             try {
                 
