@@ -113,30 +113,29 @@
 
             <div class="form-group">
                 <label for="temp">Temperature (°C) 🌡️</label>
-                <input type="number" id="temp" step="0.1" required placeholder="e.g., 32.5">
+                <input type="number" id="temp" step="0.1" required placeholder="Loading...">
             </div>
 
             <div class="form-group">
                 <label for="humidity">Relative Humidity (%) 💧</label>
-                <input type="number" id="humidity" step="0.1" required placeholder="e.g., 45.0">
+                <input type="number" id="humidity" step="0.1" required placeholder="Loading...">
             </div>
 
             <div class="form-group">
                 <label for="wind">Wind Speed (m/s) 💨</label>
-                <input type="number" id="wind" step="0.1" required placeholder="e.g., 2.1">
+                <input type="number" id="wind" step="0.1" required placeholder="Loading...">
             </div>
 
             <div class="form-group">
                 <label for="rain">Precipitation (mm) 🌧️</label>
-                <input type="number" id="rain" step="0.1" required placeholder="e.g., 0.0">
+                <input type="number" id="rain" step="0.1" required placeholder="Loading...">
             </div>
 
             <button type="submit">Predict Tomorrow's Yield</button>
         </form>
 
         <div id="loadingMessage" class="loading">
-            Calculating prediction...<br>
-            <span style="font-size: 0.85em;">(This may take up to 60 seconds if the free server is waking up)</span>
+            <!-- Loading text injected via JS -->
         </div>
 
         <div id="resultBox" class="result-box">
@@ -152,12 +151,12 @@
         // Auto-fetch tomorrow's weather on page load
         document.addEventListener("DOMContentLoaded", async () => {
             const loadingMessage = document.getElementById('loadingMessage');
-            loadingMessage.innerText = "Fetching local weather data for Bahawalpur...";
+            loadingMessage.innerText = "Fetching local weather forecast from Open-Meteo...";
             loadingMessage.style.display = 'block';
 
             try {
                 // Fetch daily forecast from Open-Meteo (Free, no API key required)
-                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto`;
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto`;
                 
                 const response = await fetch(weatherUrl);
                 if (!response.ok) throw new Error("Weather API failed");
@@ -166,21 +165,18 @@
                 
                 // Extract tomorrow's data (index 1 in the daily array)
                 const tempMax = data.daily.temperature_2m_max[1];
-                const tempMin = data.daily.temperature_2m_min[1];
-                const avgTemp = ((tempMax + tempMin) / 2).toFixed(1);
-                
-                const windSpeed = data.daily.windspeed_10m_max[1].toFixed(1); // m/s usually, check API unit
-                const rain = data.daily.precipitation_sum[1].toFixed(1); // mm
+                const windSpeed = data.daily.windspeed_10m_max[1]; // km/h
+                const rain = data.daily.precipitation_sum[1]; // mm
                 
                 // Calculate average humidity for tomorrow from hourly data (hours 24 to 47)
                 const tomorrowHumidityData = data.hourly.relative_humidity_2m.slice(24, 48);
                 const avgHumidity = (tomorrowHumidityData.reduce((a, b) => a + b, 0) / 24).toFixed(1);
 
                 // Auto-fill the HTML form
-                document.getElementById('temp').value = avgTemp;
+                document.getElementById('temp').value = tempMax.toFixed(1);
                 document.getElementById('humidity').value = avgHumidity;
                 document.getElementById('wind').value = (windSpeed / 3.6).toFixed(1); // Convert km/h to m/s
-                document.getElementById('rain').value = rain;
+                document.getElementById('rain').value = rain.toFixed(1);
 
                 loadingMessage.style.display = 'none';
 
@@ -191,7 +187,7 @@
             }
         });
 
-        // Your existing prediction logic
+        // Your existing prediction logic connecting to Python backend
         document.getElementById('solarForm').addEventListener('submit', async function(event) {
             event.preventDefault(); 
 
@@ -199,7 +195,7 @@
             const loadingMessage = document.getElementById('loadingMessage');
             
             resultBox.style.display = 'none';
-            loadingMessage.innerText = "Calculating prediction... (This may take up to 60 seconds)";
+            loadingMessage.innerHTML = "Calculating prediction...<br><span style='font-size: 0.85em;'>(This may take up to 60 seconds if the free server is waking up)</span>";
             loadingMessage.style.display = 'block';
 
             const requestData = {
@@ -211,25 +207,29 @@
             };
 
             try {
-                // UPDATE THIS URL TO YOUR RENDER URL
-                const response = await fetch('https://solar-predictions.onrender.com/predict', {
+                // IMPORTANT: Replace the URL below with your actual Render API link
+                const response = await fetch('https://YOUR-APP-NAME.onrender.com/predict', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(requestData)
                 });
 
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
 
                 const resultData = await response.json();
                 
                 loadingMessage.style.display = 'none';
                 resultBox.style.display = 'block';
-                resultBox.style.borderLeftColor = '#00796b';
+                resultBox.style.borderLeftColor = 'var(--primary)';
                 resultBox.style.backgroundColor = '#e0f2f1';
                 resultBox.innerHTML = `
                     <strong>Prediction Success! ✅</strong><br><br>
                     <strong>Raw Irradiance:</strong> ${resultData.raw_irradiance_kwh_m2} kWh/m²<br>
-                    <strong style="color: #00796b; font-size: 1.2em; display: inline-block; margin-top: 10px;">
+                    <strong style="color: var(--primary); font-size: 1.2em; display: inline-block; margin-top: 10px;">
                         Estimated Yield: ${resultData.estimated_yield_kwh} Units (kWh)
                     </strong>
                 `;
@@ -240,8 +240,9 @@
                 resultBox.style.display = 'block';
                 resultBox.style.borderLeftColor = 'red';
                 resultBox.style.backgroundColor = '#ffebee';
-                resultBox.innerHTML = `<strong>Connection Error ❌</strong><br>Failed to connect to the prediction model. Please ensure your Render API is live.`;
+                resultBox.innerHTML = `<strong>Connection Error ❌</strong><br>Failed to connect to the prediction model. Please make sure your Render API is live.`;
             }
         });
-    </script></body>
+    </script>
+</body>
 </html>
