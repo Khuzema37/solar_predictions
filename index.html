@@ -3,159 +3,483 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar Predictor - Bahawalpur</title>
+    <title>Solar Yield Forecaster - Bahawalpur</title>
+    <!-- Include Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
     <style>
         :root {
-            --primary: #00796b;
-            --primary-dark: #004d40;
-            --bg-color: #f4f7f6;
+            --bg-body: #f8fafc;
+            --text-dark: #0f172a;
+            --text-muted: #64748b;
+            --primary: #14b8a6; /* Teal for button */
+            --primary-dark: #0f766e;
             --card-bg: #ffffff;
-            --text-main: #333333;
+            --border-color: #e2e8f0;
+            --result-bg: #115e59; /* Dark teal for result card */
         }
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-        }
-        .container {
-            background-color: var(--card-bg);
-            padding: 30px 40px;
-            border-radius: 12px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.1);
-            max-width: 500px;
-            width: 100%;
-        }
-        h2 {
-            text-align: center;
-            color: var(--primary-dark);
-            margin-bottom: 5px;
-        }
-        p.subtitle {
-            text-align: center;
-            color: #666;
-            font-size: 0.9em;
-            margin-bottom: 25px;
-        }
-        .form-group {
-            margin-bottom: 15px;
-        }
-        label {
-            display: block;
-            margin-bottom: 5px;
-            font-weight: 600;
-            font-size: 0.9em;
-        }
-        input {
-            width: 100%;
-            padding: 10px;
-            border: 1px solid #ccc;
-            border-radius: 6px;
+
+        * {
             box-sizing: border-box;
-            font-size: 1em;
+            margin: 0;
+            padding: 0;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         }
-        input:focus {
-            border-color: var(--primary);
-            outline: none;
-            box-shadow: 0 0 5px rgba(0, 121, 107, 0.3);
+
+        body {
+            background-color: var(--bg-body);
+            color: var(--text-dark);
+            padding-bottom: 50px;
         }
-        button {
+
+        /* Top Navigation Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 40px;
+            background-color: #ffffff;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .logo-area {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .logo-icon {
+            background-color: #e6fdfac4;
+            color: var(--primary);
+            padding: 10px;
+            border-radius: 8px;
+            display: flex;
+        }
+
+        .logo-text h1 {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .logo-text span {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+        }
+
+        .location-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background-color: #f1f5f9;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+
+        .location-badge i {
+            color: #f59e0b;
+            width: 16px;
+            height: 16px;
+        }
+
+        /* Main Content Container */
+        .container {
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .intro-section {
+            margin-bottom: 40px;
+            max-width: 800px;
+        }
+
+        .intro-section h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 12px;
+            color: #1e293b;
+        }
+
+        .intro-section p {
+            color: var(--text-muted);
+            font-size: 1.05rem;
+            line-height: 1.5;
+        }
+
+        /* Two Column Layout */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: 1fr 1.3fr;
+            gap: 30px;
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 16px;
+            padding: 30px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+            border: 1px solid rgba(255,255,255,0.5);
+        }
+
+        /* Left Panel - Inputs */
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 25px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .section-title i {
+            color: var(--primary-dark);
+            width: 20px;
+            height: 20px;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        .form-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: #334155;
+            margin-bottom: 8px;
+        }
+
+        .input-wrapper {
+            position: relative;
+            display: flex;
+            align-items: center;
+        }
+
+        .input-wrapper i {
+            position: absolute;
+            left: 12px;
+            width: 18px;
+            height: 18px;
+        }
+
+        .input-wrapper input {
             width: 100%;
-            padding: 12px;
+            padding: 12px 12px 12px 40px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 1rem;
+            color: var(--text-dark);
+            outline: none;
+            transition: border-color 0.2s;
+        }
+
+        .input-wrapper input:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
+        }
+
+        .input-hint {
+            display: block;
+            font-size: 0.75rem;
+            color: #94a3b8;
+            margin-top: 6px;
+        }
+
+        /* Weather Grid */
+        .weather-inputs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        /* Custom Icon Colors in Inputs */
+        .icon-zap { color: #f59e0b; }
+        .icon-temp { color: #ef4444; }
+        .icon-drop { color: #3b82f6; }
+        .icon-wind { color: #64748b; }
+        .icon-rain { color: #8b5cf6; }
+
+        .btn-submit {
+            width: 100%;
+            padding: 14px;
             background-color: var(--primary);
             color: white;
             border: none;
-            border-radius: 6px;
-            font-size: 1.1em;
-            font-weight: bold;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: 600;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 8px;
             cursor: pointer;
-            margin-top: 10px;
-            transition: background-color 0.3s ease;
+            margin-top: 25px;
+            transition: background-color 0.2s;
         }
-        button:hover {
+
+        .btn-submit:hover {
             background-color: var(--primary-dark);
         }
-        .result-box {
-            margin-top: 25px;
-            padding: 15px;
-            background-color: #e0f2f1;
-            border-left: 5px solid var(--primary);
-            border-radius: 4px;
-            display: none;
-            font-size: 1.05em;
-            line-height: 1.5;
-        }
-        .loading {
+
+        #loadingText {
             text-align: center;
-            font-style: italic;
-            color: #555;
-            margin-top: 15px;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-top: 10px;
             display: none;
         }
+
+        /* Right Panel - Results */
+        .right-panel {
+            background: transparent;
+            box-shadow: none;
+            padding: 0;
+            border: none;
+        }
+
+        .result-card-main {
+            background-color: var(--result-bg);
+            color: white;
+            padding: 30px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .result-card-main::after {
+            content: "";
+            position: absolute;
+            top: 0; right: 0;
+            width: 150px; height: 150px;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
+            border-radius: 50%;
+            transform: translate(30%, -30%);
+        }
+
+        .result-label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            color: #a7f3d0;
+            margin-bottom: 10px;
+        }
+
+        .result-value {
+            font-size: 3.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: baseline;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+
+        .result-unit {
+            font-size: 1.2rem;
+            font-weight: 400;
+            color: #e2e8f0;
+        }
+
+        .irradiance-row {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            padding-top: 15px;
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        .irradiance-row i {
+            color: #fde047;
+            width: 18px; height: 18px;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-box {
+            background-color: white;
+            padding: 20px;
+            border-radius: 12px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-box-title {
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            margin-bottom: 8px;
+        }
+
+        .stat-box-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 4px;
+        }
+
+        .stat-box-sub {
+            font-size: 0.75rem;
+            color: #94a3b8;
+        }
+
+        .power-section h4 {
+            font-size: 0.9rem;
+            color: var(--text-dark);
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Default hidden states */
+        .data-hidden { opacity: 0.2; }
     </style>
 </head>
 <body>
 
+    <header>
+        <div class="logo-area">
+            <div class="logo-icon">
+                <i data-lucide="layout-dashboard"></i>
+            </div>
+            <div class="logo-text">
+                <h1>Solar Yield Forecaster</h1>
+            </div>
+        </div>
+        <div class="location-badge">
+            <i data-lucide="map-pin"></i> Bahawalpur, PK
+        </div>
+    </header>
+
     <div class="container">
-        <h2>Solar Energy Output Estimation</h2>
-        <p class="subtitle">From Weather Forecasts for Bahawalpur</p>
-
-        <form id="solarForm">
-            <div class="form-group">
-                <label for="system_size">System Size (kW) ⚡</label>
-                <input type="number" id="system_size" step="0.1" value="5.0" required placeholder="e.g., 5.0 or 10.0">
-            </div>
-
-            <div class="form-group">
-                <label for="temp">Temperature (°C) 🌡️</label>
-                <input type="number" id="temp" step="0.1" required placeholder="Loading...">
-            </div>
-
-            <div class="form-group">
-                <label for="humidity">Relative Humidity (%) 💧</label>
-                <input type="number" id="humidity" step="0.1" required placeholder="Loading...">
-            </div>
-
-            <div class="form-group">
-                <label for="wind">Wind Speed (m/s) 💨</label>
-                <input type="number" id="wind" step="0.1" required placeholder="Loading...">
-            </div>
-
-            <div class="form-group">
-                <label for="rain">Precipitation (mm) 🌧️</label>
-                <input type="number" id="rain" step="0.1" required placeholder="Loading...">
-            </div>
-
-            <button type="submit">Predict Tomorrow's Yield</button>
-        </form>
-
-        <div id="loadingMessage" class="loading">
-            <!-- Loading text injected via JS -->
+        <div class="intro-section">
+            <h2>Tomorrow's Energy Forecast</h2>
+            <p>Enter the expected meteorological conditions to simulate our Random Forest model and predict the exact electricity output for a residential solar setup in Bahawalpur.</p>
         </div>
 
-        <div id="resultBox" class="result-box">
-            <!-- Results will be injected here via JavaScript -->
+        <div class="dashboard-grid">
+            
+            <!-- LEFT PANEL: INPUTS -->
+            <div class="card">
+                <div class="section-title">
+                    <i data-lucide="sliders-horizontal"></i> System & Weather Inputs
+                </div>
+                
+                <form id="solarForm">
+                    <div class="form-group">
+                        <label>Total System Size (kW)</label>
+                        <div class="input-wrapper">
+                            <i data-lucide="zap" class="icon-zap"></i>
+                            <input type="number" id="system_size" step="0.1" value="5" required>
+                        </div>
+                        <span class="input-hint">Standard residential sizes range from 3kW to 15kW.</span>
+                    </div>
+
+                    <div class="weather-inputs">
+                        <div class="form-group">
+                            <label>Temperature (°C)</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="thermometer" class="icon-temp"></i>
+                                <input type="number" id="temp" step="0.1" required placeholder="...">
+                            </div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Rel. Humidity (%)</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="droplet" class="icon-drop"></i>
+                                <input type="number" id="humidity" step="0.1" required placeholder="...">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Wind Speed (m/s)</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="wind" class="icon-wind"></i>
+                                <input type="number" id="wind" step="0.1" required placeholder="...">
+                            </div>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Precipitation (mm)</label>
+                            <div class="input-wrapper">
+                                <i data-lucide="cloud-rain" class="icon-rain"></i>
+                                <input type="number" id="rain" step="0.1" required placeholder="...">
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="btn-submit">
+                        Calculate Yield <i data-lucide="cpu" style="width: 18px;"></i>
+                    </button>
+                    <div id="loadingText">Fetching prediction from server...</div>
+                </form>
+            </div>
+
+            <!-- RIGHT PANEL: DASHBOARD -->
+            <div class="card right-panel">
+                <div class="section-title">
+                    <i data-lucide="pie-chart" style="color: #f59e0b;"></i> Prediction Dashboard
+                </div>
+
+                <div class="result-card-main">
+                    <div class="result-label">ESTIMATED DAILY OUTPUT</div>
+                    <div class="result-value">
+                        <span id="ui_yield" class="data-hidden">--</span> 
+                        <span class="result-unit">kWh (Units)</span>
+                    </div>
+                    <div class="irradiance-row">
+                        <i data-lucide="sun"></i> 
+                        Model Irradiance: <strong style="margin-left:5px;"><span id="ui_irradiance" class="data-hidden">--</span> kWh/m²</strong>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-box">
+                        <div class="stat-box-title">ASSUMED SETUP AREA</div>
+                        <div class="stat-box-value"><span id="ui_area">12.9</span> m²</div>
+                        <div class="stat-box-sub">Based on 550W panels</div>
+                    </div>
+                    <div class="stat-box">
+                        <div class="stat-box-title">SYSTEM EFFICIENCY</div>
+                        <div class="stat-box-value">22%</div>
+                        <div class="stat-box-sub">Accounting for losses</div>
+                    </div>
+                </div>
+
+                <div class="power-section">
+                    <h4>WHAT CAN THIS POWER?</h4>
+                    <div style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">
+                        Calculate a yield to see appliance estimates...
+                    </div>
+                </div>
+
+            </div>
         </div>
     </div>
 
     <script>
-        // Bahawalpur Coordinates
-        const LAT = 29.39;
-        const LON = 71.67;
+        // Initialize Lucide Icons
+        lucide.createIcons();
 
-        // Auto-fetch tomorrow's weather on page load
+        // 1. Auto-Fetch Open-Meteo Data on Load
         document.addEventListener("DOMContentLoaded", async () => {
-            const loadingMessage = document.getElementById('loadingMessage');
-            loadingMessage.innerText = "Fetching local weather forecast from Open-Meteo...";
-            loadingMessage.style.display = 'block';
-
+            const LAT = 29.39;
+            const LON = 71.67;
+            
             try {
-                // Fetch daily forecast from Open-Meteo (Free, no API key required)
+                // Open-Meteo API query for daily forecasts without an API key
                 const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto`;
                 
                 const response = await fetch(weatherUrl);
@@ -163,40 +487,43 @@
                 
                 const data = await response.json();
                 
-                // Extract tomorrow's data (index 1 in the daily array)
                 const tempMax = data.daily.temperature_2m_max[1];
-                const windSpeed = data.daily.windspeed_10m_max[1]; // km/h
-                const rain = data.daily.precipitation_sum[1]; // mm
+                const windSpeed = data.daily.windspeed_10m_max[1];
+                const rain = data.daily.precipitation_sum[1];
                 
-                // Calculate average humidity for tomorrow from hourly data (hours 24 to 47)
                 const tomorrowHumidityData = data.hourly.relative_humidity_2m.slice(24, 48);
                 const avgHumidity = (tomorrowHumidityData.reduce((a, b) => a + b, 0) / 24).toFixed(1);
 
-                // Auto-fill the HTML form
                 document.getElementById('temp').value = tempMax.toFixed(1);
                 document.getElementById('humidity').value = avgHumidity;
-                document.getElementById('wind').value = (windSpeed / 3.6).toFixed(1); // Convert km/h to m/s
+                document.getElementById('wind').value = (windSpeed / 3.6).toFixed(1); // km/h to m/s
                 document.getElementById('rain').value = rain.toFixed(1);
 
-                loadingMessage.style.display = 'none';
+                // Initialize Area based on default 5kW
+                updateArea(5);
 
             } catch (error) {
                 console.error('Error fetching weather:', error);
-                loadingMessage.innerText = "Failed to auto-fetch weather. Please enter manually.";
-                setTimeout(() => { loadingMessage.style.display = 'none'; }, 3000);
             }
         });
 
-        // Your existing prediction logic connecting to Python backend
+        // Helper to update area instantly when user types a new kW size
+        function updateArea(kw) {
+            const panels = (kw * 1000) / 550;
+            const area = (panels * 2.58).toFixed(1);
+            document.getElementById('ui_area').innerText = area;
+        }
+
+        document.getElementById('system_size').addEventListener('input', (e) => {
+            updateArea(e.target.value || 0);
+        });
+
+        // 2. Form Submission to Render API
         document.getElementById('solarForm').addEventListener('submit', async function(event) {
             event.preventDefault(); 
-
-            const resultBox = document.getElementById('resultBox');
-            const loadingMessage = document.getElementById('loadingMessage');
             
-            resultBox.style.display = 'none';
-            loadingMessage.innerHTML = "Calculating prediction...<br><span style='font-size: 0.85em;'>(This may take up to 60 seconds if the free server is waking up)</span>";
-            loadingMessage.style.display = 'block';
+            const loadingText = document.getElementById('loadingText');
+            loadingText.style.display = 'block';
 
             const requestData = {
                 T2M: parseFloat(document.getElementById('temp').value),
@@ -207,40 +534,33 @@
             };
 
             try {
-                // IMPORTANT: Replace the URL below with your actual Render API link
-                const response = await fetch('https://YOUR-APP-NAME.onrender.com/predict', {
+                // IMPORTANT: Replace with your actual Render URL!
+                const response = await fetch('https://solar-predictons.onrender.com/predict', {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(requestData)
                 });
 
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status}`);
-                }
+                if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
                 const resultData = await response.json();
                 
-                loadingMessage.style.display = 'none';
-                resultBox.style.display = 'block';
-                resultBox.style.borderLeftColor = 'var(--primary)';
-                resultBox.style.backgroundColor = '#e0f2f1';
-                resultBox.innerHTML = `
-                    <strong>Prediction Success! ✅</strong><br><br>
-                    <strong>Raw Irradiance:</strong> ${resultData.raw_irradiance_kwh_m2} kWh/m²<br>
-                    <strong style="color: var(--primary); font-size: 1.2em; display: inline-block; margin-top: 10px;">
-                        Estimated Yield: ${resultData.estimated_yield_kwh} Units (kWh)
-                    </strong>
-                `;
+                // Update UI with results and remove faded "hidden" state
+                const yieldEl = document.getElementById('ui_yield');
+                const irrEl = document.getElementById('ui_irradiance');
+                
+                yieldEl.innerText = resultData.estimated_yield_kwh.toFixed(1);
+                yieldEl.classList.remove('data-hidden');
+                
+                irrEl.innerText = resultData.raw_irradiance_kwh_m2.toFixed(2);
+                irrEl.classList.remove('data-hidden');
+
+                loadingText.style.display = 'none';
 
             } catch (error) {
                 console.error('Error fetching prediction:', error);
-                loadingMessage.style.display = 'none';
-                resultBox.style.display = 'block';
-                resultBox.style.borderLeftColor = 'red';
-                resultBox.style.backgroundColor = '#ffebee';
-                resultBox.innerHTML = `<strong>Connection Error ❌</strong><br>Failed to connect to the prediction model. Please make sure your Render API is live.`;
+                loadingText.innerText = "Error connecting to model. Ensure API is live.";
+                loadingText.style.color = "red";
             }
         });
     </script>
