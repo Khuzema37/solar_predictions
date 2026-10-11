@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar Energy Output Estimation - Bahawalpur</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
+        }
+        .gradient-text {
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #0d9488;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
+            display: none;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        teal: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                        },
+                        amber: {
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+
+    <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-teal-50 p-2 rounded-lg text-teal-600">
+                    <i class="fa-solid fa-solar-panel text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 leading-tight">Solar Yield Forecaster</h1>
+                    <p class="text-xs text-slate-500 font-medium">Powered by Machine Learning</p>
+                </div>
+            </div>
+            <div class="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                <i class="fa-solid fa-location-dot text-amber-500"></i>
+                <span class="text-sm font-semibold text-slate-700">Bahawalpur, PK</span>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        
+        <div class="mb-8 text-center sm:text-left">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-2">Tomorrow's Energy Forecast</h2>
+            <p class="text-slate-600 max-w-2xl">Enter the expected meteorological conditions to simulate our Random Forest model and predict the exact electricity output for a residential solar setup in Bahawalpur.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            <div class="lg:col-span-5 space-y-6">
+                <form id="predictionForm" class="glass-panel rounded-2xl p-6 sm:p-8">
+                    <h3 class="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-3 mb-5 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-teal-600"></i> System & Weather Inputs
+                    </h3>
+
+                    <!-- System Size -->
+                    <div class="mb-5">
+                        <label for="systemSize" class="block text-sm font-medium text-slate-700 mb-1">Total System Size (kW)</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fa-solid fa-bolt text-amber-500"></i>
+                            </div>
+                            <input type="number" step="0.1" id="systemSize" value="5" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required>
+                        </div>
+                        <p class="text-xs text-slate-500 mt-1">Standard residential sizes range from 3kW to 15kW.</p>
+                    </div>
+
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <!-- Temperature -->
+                        <div>
+                            <label for="temp" class="block text-sm font-medium text-slate-700 mb-1">Temperature (°C)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-temperature-half text-red-500"></i>
+                                </div>
+                                <input type="number" step="0.1" id="temp" value="32" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required>
+                            </div>
+                        </div>
+
+                        <!-- Humidity -->
+                        <div>
+                            <label for="humidity" class="block text-sm font-medium text-slate-700 mb-1">Rel. Humidity (%)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-droplet text-blue-500"></i>
+                                </div>
+                                <input type="number" step="0.1" id="humidity" value="45" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required>
+                            </div>
+                        </div>
+
+                        <!-- Wind Speed -->
+                        <div>
+                            <label for="wind" class="block text-sm font-medium text-slate-700 mb-1">Wind Speed (m/s)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-wind text-slate-400"></i>
+                                </div>
+                                <input type="number" step="0.1" id="wind" value="2.1" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required>
+                            </div>
+                        </div>
+
+                        <!-- Precipitation -->
+                        <div>
+                            <label for="precip" class="block text-sm font-medium text-slate-700 mb-1">Precipitation (mm)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-cloud-showers-heavy text-indigo-500"></i>
+                                </div>
+                                <input type="number" step="0.1" id="precip" value="0" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button type="submit" class="mt-8 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-200">
+                        <span>Calculate Yield</span>
+                        <div id="btnLoader" class="loader"></div>
+                        <i id="btnIcon" class="fa-solid fa-microchip"></i>
+                    </button>
+                </form>
+            </div>
+
+            <div class="lg:col-span-7">
+                <div id="resultsContainer" class="glass-panel rounded-2xl p-6 sm:p-8 h-full flex flex-col relative overflow-hidden">
+                    
+                    <!-- Decorative background element -->
+                    <div class="absolute -top-24 -right-24 w-64 h-64 bg-amber-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+                    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+
+                    <h3 class="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-3 mb-6 relative z-10">
+                        <i class="fa-solid fa-chart-pie text-amber-500 mr-2"></i> Prediction Dashboard
+                    </h3>
+
+                    <!-- Initial State -->
+                    <div id="emptyState" class="flex-grow flex flex-col items-center justify-center text-center py-12 relative z-10">
+                        <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-2 border-dashed border-slate-300">
+                            <i class="fa-solid fa-chart-line text-3xl text-slate-400"></i>
+                        </div>
+                        <h4 class="text-lg font-medium text-slate-700 mb-1">Awaiting Data</h4>
+                        <p class="text-sm text-slate-500 max-w-sm">Enter the meteorological parameters on the left and calculate to simulate the Random Forest prediction.</p>
+                    </div>
+
+                    <!-- Populated State (Hidden by default) -->
+                    <div id="populatedState" class="hidden flex-grow flex-col relative z-10 fade-in">
+                        
+                        <!-- Primary Result -->
+                        <div class="bg-gradient-to-br from-teal-600 to-teal-800 rounded-xl p-6 text-white shadow-lg mb-6 transform transition-transform hover:scale-[1.02] duration-300">
+                            <p class="text-teal-100 text-sm font-medium mb-1 uppercase tracking-wider">Estimated Daily Output</p>
+                            <div class="flex items-baseline gap-2">
+                                <span id="finalKwh" class="text-5xl font-extrabold tracking-tight">0.0</span>
+                                <span class="text-xl font-medium text-teal-200">kWh (Units)</span>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-teal-500/50 flex justify-between items-center text-sm">
+                                <span><i class="fa-solid fa-sun mr-1 text-amber-300"></i> Model Irradiance: <span id="rawIrradiance" class="font-bold">0.0</span> kWh/m²</span>
+                            </div>
+                        </div>
+
+                        <!-- System Breakdown -->
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <p class="text-xs text-slate-500 font-medium uppercase mb-1">Assumed Setup Area</p>
+                                <p class="text-lg font-bold text-slate-800"><span id="totalArea">0</span> m²</p>
+                                <p class="text-xs text-slate-400 mt-1">Based on 550W panels</p>
+                            </div>
+                            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <p class="text-xs text-slate-500 font-medium uppercase mb-1">System Efficiency</p>
+                                <p class="text-lg font-bold text-slate-800">22%</p>
+                                <p class="text-xs text-slate-400 mt-1">Accounting for losses</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">What can this power?</h4>
+                            <ul id="applianceList" class="space-y-3">
+                                <!-- Dynamically populated by JS -->
+                            </ul>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        document.getElementById('predictionForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            // UI Loading Simulation
+            const btnLoader = document.getElementById('btnLoader');
+            const btnIcon = document.getElementById('btnIcon');
+            const submitBtn = this.querySelector('button[type="submit"]');
+            
+            btnLoader.style.display = 'block';
+            btnIcon.style.display = 'none';
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-90');
+
+            // Simulate network/processing delay for presentation realism (600ms)
+            setTimeout(() => {
+                calculateYield();
+                
+                // Reset button
+                btnLoader.style.display = 'none';
+                btnIcon.style.display = 'block';
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-90');
+                
+                // Switch Views
+                document.getElementById('emptyState').classList.add('hidden');
+                document.getElementById('populatedState').classList.remove('hidden');
+                document.getElementById('populatedState').classList.add('flex');
+                
+            }, 600);
+        });
+
+        function calculateYield() {
+            // 1. Get Input Values
+            const systemSize = parseFloat(document.getElementById('systemSize').value);
+            const temp = parseFloat(document.getElementById('temp').value);
+            const humidity = parseFloat(document.getElementById('humidity').value);
+            const wind = parseFloat(document.getElementById('wind').value);
+            const precip = parseFloat(document.getElementById('precip').value);
+
+            // 2. Simulate Random Forest Irradiance Prediction (Bahawalpur specific math)
+            let irradiance = 5.1; // Base Bahawalpur average
+            
+            // Adjustments based on prompt rules
+            irradiance += 0.05 * (temp - 25);
+            irradiance -= 0.02 * (humidity - 35);
+            irradiance -= 0.5 * precip;
+            // Wind has minor complex effects, keeping it aligned with basic rule set.
+            
+            // Clamp value between realistic minimum and maximum (1.0 to 8.5)
+            irradiance = Math.max(1.0, Math.min(8.5, irradiance));
+
+            // 3. Post-Processing: Convert to user specifics
+            // Area = (System Size * 1000 / 550) * 2.58
+            const area = (systemSize * 1000 / 550) * 2.58;
+            
+            // Final kWh = Irradiance * Area * Efficiency(0.22)
+            const finalKwh = irradiance * area * 0.22;
+
+            // 4. Update UI DOM Elements
+            document.getElementById('rawIrradiance').innerText = irradiance.toFixed(2);
+            document.getElementById('totalArea').innerText = area.toFixed(1);
+            
+            // Animate number counting for final kWh
+            animateValue("finalKwh", 0, finalKwh, 1000);
+
+            // 5. Calculate and populate appliance list
+            populateAppliances(finalKwh);
+        }
+
+        function populateAppliances(kwh) {
+            const list = document.getElementById('applianceList');
+            list.innerHTML = ''; // Clear previous
+
+            const appliances = [
+                { name: '1.5 Ton DC Inverter AC', threshold: 18, desc: 'Run for ~12 hours', icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
+                { name: '1.5 Ton DC Inverter AC', threshold: 12, desc: 'Run for ~8 hours', icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
+                { name: 'Refrigerator', threshold: 3, desc: 'Run for 24 hours', icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
+                { name: 'Water Pump (1 HP)', threshold: 1.5, desc: 'Run for ~1.5 hours', icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
+                { name: '4 Ceiling Fans', threshold: 2, desc: 'Run for 12 hours', icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' },
+                { name: 'Basic Lighting & TV', threshold: 1, desc: 'Evening usage (6 hours)', icon: 'fa-lightbulb', color: 'text-amber-500', bg: 'bg-amber-50' }
+            ];
+
+            let addedCount = 0;
+            let remainingKwh = kwh;
+
+            appliances.forEach(app => {
+                // If we have enough power for this appliance logic, and haven't shown too many
+                if (remainingKwh >= app.threshold && addedCount < 4) {
+                    
+                    // Don't duplicate AC entries
+                    if(app.icon === 'fa-snowflake' && list.innerHTML.includes('Inverter AC')) return;
+
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50';
+                    li.innerHTML = `
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full ${app.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
+                            <i class="fa-solid ${app.icon} ${app.color}"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-slate-800 truncate">${app.name}</p>
+                            <p class="text-xs text-slate-500 truncate">${app.desc}</p>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <i class="fa-solid fa-check mr-1"></i> Covered
+                            </span>
+                        </div>
+                    `;
+                    list.appendChild(li);
+                    remainingKwh -= app.threshold; // Deduct used power
+                    addedCount++;
+                }
+            });
+
+            if(addedCount === 0) {
+                 const li = document.createElement('li');
+                    li.className = 'flex items-center p-3 border border-amber-100 rounded-lg bg-amber-50';
+                    li.innerHTML = `
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center mr-4 text-amber-600">
+                            <i class="fa-solid fa-battery-quarter"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-amber-800">Low Generation Expected</p>
+                            <p class="text-xs text-amber-600">Consider reducing appliance usage or relying on grid/battery backup.</p>
+                        </div>
+                    `;
+                    list.appendChild(li);
+            }
+        }
+
+        // Utility to animate number counting
+        function animateValue(id, start, end, duration) {
+            if (start === end) return;
+            let obj = document.getElementById(id);
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                // Easing out cubic
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                const current = progress * (end - start) + start;
+                obj.innerHTML = current.toFixed(1);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    obj.innerHTML = end.toFixed(1);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
+    </script>
+</body>
+</html>
