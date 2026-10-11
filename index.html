@@ -3,566 +3,420 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Solar Yield Forecaster - Bahawalpur</title>
-    <!-- Include Lucide Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <title>Solar Energy Output Estimation - Bahawalpur</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
-        :root {
-            --bg-body: #f8fafc;
-            --text-dark: #0f172a;
-            --text-muted: #64748b;
-            --primary: #14b8a6; /* Teal for button */
-            --primary-dark: #0f766e;
-            --card-bg: #ffffff;
-            --border-color: #e2e8f0;
-            --result-bg: #115e59; /* Dark teal for result card */
-        }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-        }
-
         body {
-            background-color: var(--bg-body);
-            color: var(--text-dark);
-            padding-bottom: 50px;
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
         }
-
-        /* Top Navigation Header */
-        header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 20px 40px;
-            background-color: #ffffff;
-            border-bottom: 1px solid var(--border-color);
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
         }
-
-        .logo-area {
-            display: flex;
-            align-items: center;
-            gap: 15px;
+        .gradient-text {
+            background-clip: text;
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
         }
-
-        .logo-icon {
-            background-color: #e6fdfac4;
-            color: var(--primary);
-            padding: 10px;
-            border-radius: 8px;
-            display: flex;
-        }
-
-        .logo-text h1 {
-            font-size: 1.2rem;
-            font-weight: 700;
-        }
-
-        .logo-text span {
-            font-size: 0.8rem;
-            color: var(--text-muted);
-        }
-
-        .location-badge {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            background-color: #f1f5f9;
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: var(--text-dark);
-        }
-
-        .location-badge i {
-            color: #f59e0b;
-            width: 16px;
-            height: 16px;
-        }
-
-        /* Main Content Container */
-        .container {
-            max-width: 1200px;
-            margin: 40px auto;
-            padding: 0 20px;
-        }
-
-        .intro-section {
-            margin-bottom: 40px;
-            max-width: 800px;
-        }
-
-        .intro-section h2 {
-            font-size: 2rem;
-            font-weight: 700;
-            margin-bottom: 12px;
-            color: #1e293b;
-        }
-
-        .intro-section p {
-            color: var(--text-muted);
-            font-size: 1.05rem;
-            line-height: 1.5;
-        }
-
-        /* Two Column Layout */
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: 1fr 1.3fr;
-            gap: 30px;
-        }
-
-        .card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 30px;
-            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
-            border: 1px solid rgba(255,255,255,0.5);
-        }
-
-        /* Left Panel - Inputs */
-        .section-title {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            margin-bottom: 25px;
-            padding-bottom: 15px;
-            border-bottom: 1px solid var(--border-color);
-        }
-
-        .section-title i {
-            color: var(--primary-dark);
-            width: 20px;
-            height: 20px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 0.9rem;
-            font-weight: 500;
-            color: #334155;
-            margin-bottom: 8px;
-        }
-
-        .input-wrapper {
-            position: relative;
-            display: flex;
-            align-items: center;
-        }
-
-        .input-wrapper i {
-            position: absolute;
-            left: 12px;
-            width: 18px;
-            height: 18px;
-        }
-
-        .input-wrapper input {
-            width: 100%;
-            padding: 12px 12px 12px 40px;
-            border: 1px solid var(--border-color);
-            border-radius: 8px;
-            font-size: 1rem;
-            color: var(--text-dark);
-            outline: none;
-            transition: border-color 0.2s;
-        }
-
-        .input-wrapper input:focus {
-            border-color: var(--primary);
-            box-shadow: 0 0 0 3px rgba(20, 184, 166, 0.1);
-        }
-
-        .input-hint {
-            display: block;
-            font-size: 0.75rem;
-            color: #94a3b8;
-            margin-top: 6px;
-        }
-
-        /* Weather Grid */
-        .weather-inputs {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 25px;
-        }
-
-        /* Custom Icon Colors in Inputs */
-        .icon-zap { color: #f59e0b; }
-        .icon-temp { color: #ef4444; }
-        .icon-drop { color: #3b82f6; }
-        .icon-wind { color: #64748b; }
-        .icon-rain { color: #8b5cf6; }
-
-        .btn-submit {
-            width: 100%;
-            padding: 14px;
-            background-color: var(--primary);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            font-weight: 600;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
-            cursor: pointer;
-            margin-top: 25px;
-            transition: background-color 0.2s;
-        }
-
-        .btn-submit:hover {
-            background-color: var(--primary-dark);
-        }
-
-        #loadingText {
-            text-align: center;
-            font-size: 0.85rem;
-            color: var(--text-muted);
-            margin-top: 10px;
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #0d9488;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 1s linear infinite; /* Safari */
+            animation: spin 1s linear infinite;
             display: none;
         }
-
-        /* Right Panel - Results */
-        .right-panel {
-            background: transparent;
-            box-shadow: none;
-            padding: 0;
-            border: none;
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
         }
-
-        .result-card-main {
-            background-color: var(--result-bg);
-            color: white;
-            padding: 30px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            position: relative;
-            overflow: hidden;
+        .fade-in {
+            animation: fadeIn 0.5s ease-in-out;
         }
-
-        .result-card-main::after {
-            content: "";
-            position: absolute;
-            top: 0; right: 0;
-            width: 150px; height: 150px;
-            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
-            border-radius: 50%;
-            transform: translate(30%, -30%);
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
         }
-
-        .result-label {
-            font-size: 0.85rem;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            color: #a7f3d0;
-            margin-bottom: 10px;
-        }
-
-        .result-value {
-            font-size: 3.5rem;
-            font-weight: 700;
-            display: flex;
-            align-items: baseline;
-            gap: 10px;
-            margin-bottom: 25px;
-        }
-
-        .result-unit {
-            font-size: 1.2rem;
-            font-weight: 400;
-            color: #e2e8f0;
-        }
-
-        .irradiance-row {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 0.95rem;
-            color: #cbd5e1;
-            padding-top: 15px;
-            border-top: 1px solid rgba(255,255,255,0.1);
-        }
-
-        .irradiance-row i {
-            color: #fde047;
-            width: 18px; height: 18px;
-        }
-
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-
-        .stat-box {
-            background-color: white;
-            padding: 20px;
-            border-radius: 12px;
-            border: 1px solid var(--border-color);
-        }
-
-        .stat-box-title {
-            font-size: 0.75rem;
-            font-weight: 600;
-            color: var(--text-muted);
-            letter-spacing: 0.5px;
-            margin-bottom: 8px;
-        }
-
-        .stat-box-value {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--text-dark);
-            margin-bottom: 4px;
-        }
-
-        .stat-box-sub {
-            font-size: 0.75rem;
-            color: #94a3b8;
-        }
-
-        .power-section h4 {
-            font-size: 0.9rem;
-            color: var(--text-dark);
-            margin-bottom: 15px;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-
-        /* Default hidden states */
-        .data-hidden { opacity: 0.2; }
     </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        teal: {
+                            50: '#f0fdfa',
+                            100: '#ccfbf1',
+                            500: '#14b8a6',
+                            600: '#0d9488',
+                            700: '#0f766e',
+                        },
+                        amber: {
+                            400: '#fbbf24',
+                            500: '#f59e0b',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
 </head>
-<body>
-
-    <header>
-        <div class="logo-area">
-            <div class="logo-icon">
-                <i data-lucide="layout-dashboard"></i>
+<body class="text-slate-800 antialiased min-h-screen flex flex-col">
+    <header class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="bg-teal-50 p-2 rounded-lg text-teal-600">
+                    <i class="fa-solid fa-solar-panel text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold text-slate-900 leading-tight">Solar Yield Forecaster</h1>
+                </div>
             </div>
-            <div class="logo-text">
-                <h1>Solar Yield Forecaster</h1>
+            <div class="hidden sm:flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-full border border-slate-200">
+                <i class="fa-solid fa-location-dot text-amber-500"></i>
+                <span class="text-sm font-semibold text-slate-700">Bahawalpur, PK</span>
             </div>
-        </div>
-        <div class="location-badge">
-            <i data-lucide="map-pin"></i> Bahawalpur, PK
         </div>
     </header>
 
-    <div class="container">
-        <div class="intro-section">
-            <h2>Tomorrow's Energy Forecast</h2>
-            <p>Enter the expected meteorological conditions to simulate our Random Forest model and predict the exact electricity output for a residential solar setup in Bahawalpur.</p>
+    <main class="flex-grow max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
+        <div class="mb-8 text-center sm:text-left">
+            <h2 class="text-3xl font-extrabold text-slate-900 mb-2">Tomorrow's Energy Forecast</h2>
+            <p class="text-slate-600 max-w-2xl">Enter the expected meteorological conditions to simulate our Random Forest model and predict the exact electricity output for a residential solar setup in Bahawalpur.</p>
         </div>
 
-        <div class="dashboard-grid">
-            
-            <!-- LEFT PANEL: INPUTS -->
-            <div class="card">
-                <div class="section-title">
-                    <i data-lucide="sliders-horizontal"></i> System & Weather Inputs
-                </div>
-                
-                <form id="solarForm">
-                    <div class="form-group">
-                        <label>Total System Size (kW)</label>
-                        <div class="input-wrapper">
-                            <i data-lucide="zap" class="icon-zap"></i>
-                            <input type="number" id="system_size" step="0.1" value="5" required>
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            <div class="lg:col-span-5 space-y-6">
+                <form id="predictionForm" class="glass-panel rounded-2xl p-6 sm:p-8">
+                    <h3 class="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-3 mb-5 flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-teal-600"></i> System & Weather Inputs
+                    </h3>
+
+                    <!-- System Size -->
+                    <div class="mb-5">
+                        <label for="systemSize" class="block text-sm font-medium text-slate-700 mb-1">Total System Size (kW)</label>
+                        <div class="relative">
+                            <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <i class="fa-solid fa-bolt text-amber-500"></i>
+                            </div>
+                            <input type="number" step="0.1" id="systemSize" value="5" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required>
                         </div>
-                        <span class="input-hint">Standard residential sizes range from 3kW to 15kW.</span>
+                        <p class="text-xs text-slate-500 mt-1">Standard residential sizes range from 3kW to 15kW.</p>
                     </div>
 
-                    <div class="weather-inputs">
-                        <div class="form-group">
-                            <label>Temperature (°C)</label>
-                            <div class="input-wrapper">
-                                <i data-lucide="thermometer" class="icon-temp"></i>
-                                <input type="number" id="temp" step="0.1" required placeholder="...">
-                            </div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label>Rel. Humidity (%)</label>
-                            <div class="input-wrapper">
-                                <i data-lucide="droplet" class="icon-drop"></i>
-                                <input type="number" id="humidity" step="0.1" required placeholder="...">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                        <!-- Temperature -->
+                        <div>
+                            <label for="temp" class="block text-sm font-medium text-slate-700 mb-1">Temperature (°C)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-temperature-half text-red-500"></i>
+                                </div>
+                                <input type="number" step="0.1" id="temp" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required placeholder="Loading...">
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label>Wind Speed (m/s)</label>
-                            <div class="input-wrapper">
-                                <i data-lucide="wind" class="icon-wind"></i>
-                                <input type="number" id="wind" step="0.1" required placeholder="...">
+                        <!-- Humidity -->
+                        <div>
+                            <label for="humidity" class="block text-sm font-medium text-slate-700 mb-1">Rel. Humidity (%)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-droplet text-blue-500"></i>
+                                </div>
+                                <input type="number" step="0.1" id="humidity" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required placeholder="Loading...">
                             </div>
                         </div>
 
-                        <div class="form-group">
-                            <label>Precipitation (mm)</label>
-                            <div class="input-wrapper">
-                                <i data-lucide="cloud-rain" class="icon-rain"></i>
-                                <input type="number" id="rain" step="0.1" required placeholder="...">
+                        <!-- Wind Speed -->
+                        <div>
+                            <label for="wind" class="block text-sm font-medium text-slate-700 mb-1">Wind Speed (m/s)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-wind text-slate-400"></i>
+                                </div>
+                                <input type="number" step="0.1" id="wind" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required placeholder="Loading...">
+                            </div>
+                        </div>
+
+                        <!-- Precipitation -->
+                        <div>
+                            <label for="precip" class="block text-sm font-medium text-slate-700 mb-1">Precipitation (mm)</label>
+                            <div class="relative">
+                                <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <i class="fa-solid fa-cloud-showers-heavy text-indigo-500"></i>
+                                </div>
+                                <input type="number" step="0.1" id="precip" class="block w-full pl-10 pr-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm transition-colors" required placeholder="Loading...">
                             </div>
                         </div>
                     </div>
 
-                    <button type="submit" class="btn-submit">
-                        Calculate Yield <i data-lucide="cpu" style="width: 18px;"></i>
+                    <button type="submit" class="mt-8 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-200">
+                        <span>Calculate Yield</span>
+                        <div id="btnLoader" class="loader"></div>
+                        <i id="btnIcon" class="fa-solid fa-microchip"></i>
                     </button>
-                    <div id="loadingText">Fetching prediction from server...</div>
+                    <p id="apiStatusText" class="text-center text-xs text-slate-500 mt-3 hidden">Connecting to prediction model...</p>
                 </form>
             </div>
 
-            <!-- RIGHT PANEL: DASHBOARD -->
-            <div class="card right-panel">
-                <div class="section-title">
-                    <i data-lucide="pie-chart" style="color: #f59e0b;"></i> Prediction Dashboard
-                </div>
+            <div class="lg:col-span-7">
+                <div id="resultsContainer" class="glass-panel rounded-2xl p-6 sm:p-8 h-full flex flex-col relative overflow-hidden">
+                    <!-- Decorative background element -->
+                    <div class="absolute -top-24 -right-24 w-64 h-64 bg-amber-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
+                    <div class="absolute -bottom-24 -left-24 w-64 h-64 bg-teal-400 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
-                <div class="result-card-main">
-                    <div class="result-label">ESTIMATED DAILY OUTPUT</div>
-                    <div class="result-value">
-                        <span id="ui_yield" class="data-hidden">--</span> 
-                        <span class="result-unit">kWh (Units)</span>
+                    <h3 class="text-lg font-semibold text-slate-800 border-b border-slate-200 pb-3 mb-6 relative z-10">
+                        <i class="fa-solid fa-chart-pie text-amber-500 mr-2"></i> Prediction Dashboard
+                    </h3>
+
+                    <!-- Initial State -->
+                    <div id="emptyState" class="flex-grow flex flex-col items-center justify-center text-center py-12 relative z-10">
+                        <div class="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4 border-2 border-dashed border-slate-300">
+                            <i class="fa-solid fa-chart-line text-3xl text-slate-400"></i>
+                        </div>
+                        <h4 class="text-lg font-medium text-slate-700 mb-1">Awaiting Data</h4>
+                        <p class="text-sm text-slate-500 max-w-sm">Enter the meteorological parameters on the left and calculate to simulate the Random Forest prediction.</p>
                     </div>
-                    <div class="irradiance-row">
-                        <i data-lucide="sun"></i> 
-                        Model Irradiance: <strong style="margin-left:5px;"><span id="ui_irradiance" class="data-hidden">--</span> kWh/m²</strong>
+
+                    <!-- Populated State (Hidden by default) -->
+                    <div id="populatedState" class="hidden flex-grow flex-col relative z-10 fade-in">
+                        <!-- Primary Result -->
+                        <div class="bg-gradient-to-br from-teal-600 to-teal-800 rounded-xl p-6 text-white shadow-lg mb-6 transform transition-transform hover:scale-[1.02] duration-300">
+                            <p class="text-teal-100 text-sm font-medium mb-1 uppercase tracking-wider">Estimated Daily Output</p>
+                            <div class="flex items-baseline gap-2">
+                                <span id="finalKwh" class="text-5xl font-extrabold tracking-tight">0.0</span>
+                                <span class="text-xl font-medium text-teal-200">kWh (Units)</span>
+                            </div>
+                            <div class="mt-4 pt-4 border-t border-teal-500/50 flex justify-between items-center text-sm">
+                                <span><i class="fa-solid fa-sun mr-1 text-amber-300"></i> Model Irradiance: <span id="rawIrradiance" class="font-bold">0.0</span> kWh/m²</span>
+                            </div>
+                        </div>
+
+                        <!-- System Breakdown -->
+                        <div class="grid grid-cols-2 gap-4 mb-6">
+                            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <p class="text-xs text-slate-500 font-medium uppercase mb-1">Assumed Setup Area</p>
+                                <p class="text-lg font-bold text-slate-800"><span id="totalArea">0</span> m²</p>
+                                <p class="text-xs text-slate-400 mt-1">Based on 550W panels</p>
+                            </div>
+                            <div class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                                <p class="text-xs text-slate-500 font-medium uppercase mb-1">System Efficiency</p>
+                                <p class="text-lg font-bold text-slate-800">22%</p>
+                                <p class="text-xs text-slate-400 mt-1">Accounting for losses</p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wider mb-3">What can this power?</h4>
+                            <ul id="applianceList" class="space-y-3">
+                                <!-- Dynamically populated by JS -->
+                            </ul>
+                        </div>
                     </div>
                 </div>
-
-                <div class="stats-grid">
-                    <div class="stat-box">
-                        <div class="stat-box-title">ASSUMED SETUP AREA</div>
-                        <div class="stat-box-value"><span id="ui_area">12.9</span> m²</div>
-                        <div class="stat-box-sub">Based on 550W panels</div>
-                    </div>
-                    <div class="stat-box">
-                        <div class="stat-box-title">SYSTEM EFFICIENCY</div>
-                        <div class="stat-box-value">22%</div>
-                        <div class="stat-box-sub">Accounting for losses</div>
-                    </div>
-                </div>
-
-                <div class="power-section">
-                    <h4>WHAT CAN THIS POWER?</h4>
-                    <div style="color: var(--text-muted); font-size: 0.9rem; font-style: italic;">
-                        Calculate a yield to see appliance estimates...
-                    </div>
-                </div>
-
             </div>
         </div>
-    </div>
+        <!-- Footer Credit -->
+        <div class="mt-12 border-t border-slate-200 pt-6 text-center">
+            <p class="text-sm font-medium text-slate-500">
+                <i class="fa-solid fa-code text-teal-600 mr-1"></i> 
+                Designed & Engineered by <span class="text-slate-800 font-bold">Khuzema Qayyum</span>
+            </p>
+            <p class="text-xs text-slate-400 mt-1">
+                Islamia University of Bahawalpur
+            </p>
+        </div>
+    </main>
 
     <script>
-        // Initialize Lucide Icons
-        lucide.createIcons();
-
-        // 1. Auto-Fetch Open-Meteo Data on Load
+        // Auto-fetch tomorrow's weather on page load using Open-Meteo
         document.addEventListener("DOMContentLoaded", async () => {
-            const LAT = 29.39;
-            const LON = 71.67;
+            const LAT = 29.39; // Bahawalpur Latitude
+            const LON = 71.67; // Bahawalpur Longitude
             
             try {
-                // Open-Meteo API query for daily forecasts without an API key
-                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto`;
+                // Fetch daily forecast (using ECMWF model for stability during presentations)
+                const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,windspeed_10m_max&hourly=relative_humidity_2m&timezone=auto&models=ecmwf_ifs04`;
                 
                 const response = await fetch(weatherUrl);
                 if (!response.ok) throw new Error("Weather API failed");
                 
                 const data = await response.json();
                 
+                // Extract tomorrow's data (index 1)
                 const tempMax = data.daily.temperature_2m_max[1];
-                const windSpeed = data.daily.windspeed_10m_max[1];
-                const rain = data.daily.precipitation_sum[1];
+                const windSpeed = data.daily.windspeed_10m_max[1]; // km/h
+                const rain = data.daily.precipitation_sum[1]; // mm
                 
+                // Calculate average humidity for tomorrow
                 const tomorrowHumidityData = data.hourly.relative_humidity_2m.slice(24, 48);
                 const avgHumidity = (tomorrowHumidityData.reduce((a, b) => a + b, 0) / 24).toFixed(1);
 
+                // Auto-fill fields
                 document.getElementById('temp').value = tempMax.toFixed(1);
                 document.getElementById('humidity').value = avgHumidity;
-                document.getElementById('wind').value = (windSpeed / 3.6).toFixed(1); // km/h to m/s
-                document.getElementById('rain').value = rain.toFixed(1);
-
-                // Initialize Area based on default 5kW
-                updateArea(5);
+                document.getElementById('wind').value = (windSpeed / 3.6).toFixed(1); // Convert km/h to m/s
+                document.getElementById('precip').value = rain.toFixed(1);
 
             } catch (error) {
                 console.error('Error fetching weather:', error);
             }
         });
 
-        // Helper to update area instantly when user types a new kW size
-        function updateArea(kw) {
-            const panels = (kw * 1000) / 550;
-            const area = (panels * 2.58).toFixed(1);
-            document.getElementById('ui_area').innerText = area;
-        }
-
-        document.getElementById('system_size').addEventListener('input', (e) => {
-            updateArea(e.target.value || 0);
-        });
-
-        // 2. Form Submission to Render API
-        document.getElementById('solarForm').addEventListener('submit', async function(event) {
-            event.preventDefault(); 
+        // Handle form submission and interact with the FastAPI Render Backend
+        document.getElementById('predictionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
             
-            const loadingText = document.getElementById('loadingText');
-            loadingText.style.display = 'block';
+            // UI Loading State
+            const btnLoader = document.getElementById('btnLoader');
+            const btnIcon = document.getElementById('btnIcon');
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const apiStatusText = document.getElementById('apiStatusText');
+            
+            btnLoader.style.display = 'block';
+            btnIcon.style.display = 'none';
+            apiStatusText.classList.remove('hidden');
+            submitBtn.disabled = true;
+            submitBtn.classList.add('opacity-90');
 
+            // Gather inputs for API
             const requestData = {
                 T2M: parseFloat(document.getElementById('temp').value),
                 RH2M: parseFloat(document.getElementById('humidity').value),
                 WS2M: parseFloat(document.getElementById('wind').value),
-                PRECTOTCORR: parseFloat(document.getElementById('rain').value),
-                system_kw: parseFloat(document.getElementById('system_size').value)
+                PRECTOTCORR: parseFloat(document.getElementById('precip').value),
+                system_kw: parseFloat(document.getElementById('systemSize').value)
             };
 
             try {
-                // IMPORTANT: Replace with your actual Render URL!
+                
                 const response = await fetch('https://solar-predictions.onrender.com/predict', {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
                     body: JSON.stringify(requestData)
                 });
 
-                if (!response.ok) throw new Error(`API Error: ${response.status}`);
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
 
                 const resultData = await response.json();
-                
-                // Update UI with results and remove faded "hidden" state
-                const yieldEl = document.getElementById('ui_yield');
-                const irrEl = document.getElementById('ui_irradiance');
-                
-                yieldEl.innerText = resultData.estimated_yield_kwh.toFixed(1);
-                yieldEl.classList.remove('data-hidden');
-                
-                irrEl.innerText = resultData.raw_irradiance_kwh_m2.toFixed(2);
-                irrEl.classList.remove('data-hidden');
 
-                loadingText.style.display = 'none';
+                // Calculate Setup Area dynamically for UI
+                const area = (requestData.system_kw * 1000 / 550) * 2.58;
+
+                // Update UI DOM Elements
+                document.getElementById('rawIrradiance').innerText = resultData.raw_irradiance_kwh_m2.toFixed(2);
+                document.getElementById('totalArea').innerText = area.toFixed(1);
+                
+                // Animate number counting for final kWh
+                animateValue("finalKwh", 0, resultData.estimated_yield_kwh, 1000);
+
+                // Populate appliances based on actual model prediction
+                populateAppliances(resultData.estimated_yield_kwh);
+
+                // Switch Views
+                document.getElementById('emptyState').classList.add('hidden');
+                document.getElementById('populatedState').classList.remove('hidden');
+                document.getElementById('populatedState').classList.add('flex');
 
             } catch (error) {
                 console.error('Error fetching prediction:', error);
-                loadingText.innerText = "Error connecting to model. Ensure API is live.";
-                loadingText.style.color = "red";
+                alert("Connection Error: Failed to connect to the prediction model. Please ensure your Render API is live.");
+            } finally {
+                // Reset button state
+                btnLoader.style.display = 'none';
+                btnIcon.style.display = 'block';
+                apiStatusText.classList.add('hidden');
+                submitBtn.disabled = false;
+                submitBtn.classList.remove('opacity-90');
             }
         });
+
+        function populateAppliances(kwh) {
+            const list = document.getElementById('applianceList');
+            list.innerHTML = ''; // Clear previous
+
+            const appliances = [
+                { name: '1.5 Ton DC Inverter AC', threshold: 18, desc: 'Run for ~12 hours', icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
+                { name: '1.5 Ton DC Inverter AC', threshold: 12, desc: 'Run for ~8 hours', icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
+                { name: 'Refrigerator', threshold: 3, desc: 'Run for 24 hours', icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
+                { name: 'Water Pump (1 HP)', threshold: 1.5, desc: 'Run for ~1.5 hours', icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
+                { name: '4 Ceiling Fans', threshold: 2, desc: 'Run for 12 hours', icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' },
+                { name: 'Basic Lighting & TV', threshold: 1, desc: 'Evening usage (6 hours)', icon: 'fa-lightbulb', color: 'text-amber-500', bg: 'bg-amber-50' }
+            ];
+
+            let addedCount = 0;
+            let remainingKwh = kwh;
+
+            appliances.forEach(app => {
+                if (remainingKwh >= app.threshold && addedCount < 4) {
+                    if(app.icon === 'fa-snowflake' && list.innerHTML.includes('Inverter AC')) return;
+
+                    const li = document.createElement('li');
+                    li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50';
+                    li.innerHTML = `
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full ${app.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
+                            <i class="fa-solid ${app.icon} ${app.color}"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-slate-800 truncate">${app.name}</p>
+                            <p class="text-xs text-slate-500 truncate">${app.desc}</p>
+                        </div>
+                        <div class="flex-shrink-0">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                <i class="fa-solid fa-check mr-1"></i> Covered
+                            </span>
+                        </div>
+                    `;
+                    list.appendChild(li);
+                    remainingKwh -= app.threshold;
+                    addedCount++;
+                }
+            });
+
+            if(addedCount === 0) {
+                 const li = document.createElement('li');
+                    li.className = 'flex items-center p-3 border border-amber-100 rounded-lg bg-amber-50';
+                    li.innerHTML = `
+                        <div class="flex-shrink-0 h-10 w-10 rounded-full bg-amber-100 flex items-center justify-center mr-4 text-amber-600">
+                            <i class="fa-solid fa-battery-quarter"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <p class="text-sm font-semibold text-amber-800">Low Generation Expected</p>
+                            <p class="text-xs text-amber-600">Consider reducing appliance usage or relying on grid/battery backup.</p>
+                        </div>
+                    `;
+                    list.appendChild(li);
+            }
+        }
+
+        function animateValue(id, start, end, duration) {
+            if (start === end) return;
+            let obj = document.getElementById(id);
+            let startTimestamp = null;
+            const step = (timestamp) => {
+                if (!startTimestamp) startTimestamp = timestamp;
+                const progress = Math.min((timestamp - startTimestamp) / duration, 1);
+                const easeOut = 1 - Math.pow(1 - progress, 3);
+                const current = progress * (end - start) + start;
+                obj.innerHTML = current.toFixed(1);
+                if (progress < 1) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    obj.innerHTML = end.toFixed(1);
+                }
+            };
+            window.requestAnimationFrame(step);
+        }
     </script>
 </body>
 </html>
