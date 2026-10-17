@@ -481,5 +481,41 @@
             window.requestAnimationFrame(step);
         }
     </script>
+    <script>
+async function trackUniqueVisitor() {
+    // We use your Render URL as the unique key for the database
+    const siteKey = "solar-predictions-onrender-com";
+    const apiUrl = `https://api.counterapi.dev/v1/${siteKey}/visits`;
+    
+    // Set the cooldown time (24 hours in milliseconds)
+    const cooldownTime = 24 * 60 * 60 * 1000; 
+    const lastVisit = localStorage.getItem('lastVisitTime');
+    const currentTime = new Date().getTime();
+
+    try {
+        let response;
+        // Check if this is a new device OR if the 24 hours have passed
+        if (!lastVisit || (currentTime - parseInt(lastVisit)) > cooldownTime) {
+            // New visitor: Tell the API to increment the count by using "up"
+            response = await fetch(`${apiUrl}/up`);
+            // Stamp this device with the current time
+            localStorage.setItem('lastVisitTime', currentTime.toString());
+        } else {
+            // Returning visitor (within 24hrs): Just get the count, don't increment
+            response = await fetch(apiUrl);
+        }
+
+        const data = await response.json();
+        // Update the HTML with the final number
+        document.getElementById('visitorCount').innerText = data.count;
+        
+    } catch (error) {
+        document.getElementById('visitorCount').innerText = "Unavailable";
+    }
+}
+
+// Run the function when the page loads
+trackUniqueVisitor();
+</script>
 </body>
 </html>
