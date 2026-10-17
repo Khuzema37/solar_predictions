@@ -26,13 +26,11 @@ document.addEventListener("DOMContentLoaded", async () => {
     const LON = 71.67; // Bahawalpur Longitude
     
     try {
-        // Fetch daily forecasts (max temp, total precip, weather code) + hourly data for the model
         const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover,is_day&forecast_days=2&timezone=Asia%2FKarachi`;
         
         const weatherResponse = await fetch(weatherUrl);
         const weatherData = await weatherResponse.json();
 
-        // Tomorrow is index 1 in Open-Meteo daily arrays
         const weatherCode = weatherData.daily.weather_code[1];
         const maxTemp = weatherData.daily.temperature_2m_max[1];
         const totalPrecip = weatherData.daily.precipitation_sum[1];
@@ -49,7 +47,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
         const ui = getWeatherUI(weatherCode);
 
-        // Update UI Banner elements
         const descEl = document.getElementById('weather_description');
         const iconEl = document.getElementById('weather_icon');
         const tempEl = document.getElementById('temp_display');
@@ -60,13 +57,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         if(tempEl) tempEl.innerText = `${maxTemp.toFixed(1)} °C`;
         if(precipEl) precipEl.innerText = `${totalPrecip.toFixed(1)} mm`;
 
-        // Build the 24-hour payload for tomorrow (Index 24 to 47 for XGBoost model)
         hourlyWeatherPayload = [];
         const hourly = weatherData.hourly;
         
         for (let i = 24; i < 48; i++) {
             const cloudCoverPct = hourly.cloud_cover[i] || 0;
-            // Convert Cloud Cover percentage into Clearness Index (ALLSKY_KT)
             const estimatedKt = Math.max(0, Math.min(1.0, (100 - cloudCoverPct) / 100));
 
             hourlyWeatherPayload.push({
@@ -106,10 +101,8 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
     if(apiStatusText) apiStatusText.classList.remove('hidden');
     submitBtn.disabled = true;
 
-    // Fixed calculations using System Size (kW)
     const systemKw = parseFloat(document.getElementById('systemKw').value);
     const fixedEfficiency = 0.20; 
-    // Calculate physical Area: Area = kW / Efficiency
     const calculatedArea = systemKw / fixedEfficiency;
 
     try {
@@ -127,7 +120,6 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
 
         const resultData = await response.json();
 
-        // Update UI Dashboards
         animateValue("finalKwh", 0, resultData.total_daily_kwh, 1000);
         renderHourlyChart(resultData.hourly_kwh_yield);
         populateHourlyTable(resultData.hourly_irradiance_w_m2, resultData.hourly_kwh_yield);
@@ -148,7 +140,6 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
     }
 });
 
-// Populate the hour-by-hour forecast table
 function populateHourlyTable(irradianceArray, kwhArray) {
     const tableBody = document.getElementById('hourlyTableBody');
     tableBody.innerHTML = ''; 
@@ -157,7 +148,6 @@ function populateHourlyTable(irradianceArray, kwhArray) {
     for (let hour = 0; hour < 24; hour++) {
         const irradiance = irradianceArray[hour];
         
-        // Hide night hours completely from the table
         if (irradiance === 0) continue;
 
         const kwh = kwhArray[hour];
@@ -181,7 +171,6 @@ function populateHourlyTable(irradianceArray, kwhArray) {
     }
 }
 
-// Render Chart.js line graph
 function renderHourlyChart(hourlyKwhData) {
     const ctx = document.getElementById('hourlyYieldChart').getContext('2d');
     const hoursLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
@@ -214,15 +203,12 @@ function renderHourlyChart(hourlyKwhData) {
     });
 }
 
-// Populate simultaneous appliance bundles based on peak hourly kW generation
 function populateAppliances(hourlyKwhArray, totalDailyKwh) {
     const list = document.getElementById('applianceList');
     list.innerHTML = ''; 
 
-    // Find the peak hourly yield (which equals peak kW generation in that hour)
     const peakKw = Math.max(...hourlyKwhArray);
 
-    // Define simultaneous bundles with their combined wattage requirements (in kW)
     const bundles = [
         {
             name: "Cooling & Water Pumping",
@@ -261,7 +247,6 @@ function populateAppliances(hourlyKwhArray, totalDailyKwh) {
     let displayedCount = 0;
 
     bundles.forEach(bundle => {
-        // Check if current peak solar generation can support this simultaneous load
         const canRunNow = peakKw >= bundle.requiredKw;
         
         if (canRunNow && displayedCount < 4) {
@@ -294,28 +279,6 @@ function populateAppliances(hourlyKwhArray, totalDailyKwh) {
     }
 }
 
-// Helper to create appliance DOM element
-function createApplianceCard(app, runText, list) {
-    const li = document.createElement('li');
-    li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50';
-    li.innerHTML = `
-        <div class="flex-shrink-0 h-10 w-10 rounded-full ${app.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
-            <i class="fa-solid ${app.icon} ${app.color}"></i>
-        </div>
-        <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-slate-800 truncate">${app.name}</p>
-            <p class="text-xs text-slate-500 truncate">${runText}</p>
-        </div>
-        <div class="flex-shrink-0">
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800">
-                Covered
-            </span>
-        </div>
-    `;
-    list.appendChild(li);
-}
-
-// Smooth counting animation for numerical displays
 function animateValue(id, start, end, duration) {
     if (start === end) return;
     let obj = document.getElementById(id);
