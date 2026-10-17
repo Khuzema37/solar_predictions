@@ -253,7 +253,7 @@ function populateAppliances(hourlyKwhArray, totalDailyKwh) {
             const li = document.createElement('li');
             li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50 shadow-2xs';
             li.innerHTML = `
-                <div class="flex-shrink-0 h-10 w-10 rounded-full ${bundle.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
+                <div class="flex-shrink-0 h-20 w-20 rounded-full ${bundle.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
                     <i class="fa-solid ${bundle.icon} ${bundle.color}"></i>
                 </div>
                 <div class="flex-1 min-w-0">
@@ -261,7 +261,7 @@ function populateAppliances(hourlyKwhArray, totalDailyKwh) {
                     <p class="text-xs text-slate-500 truncate">${bundle.desc}</p>
                 </div>
                 <div class="flex-shrink-0">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[15px] font-bold bg-emerald-100 text-emerald-800">
                         Safe (~${bundle.requiredKw} kW)
                     </span>
                 </div>
