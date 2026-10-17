@@ -214,19 +214,18 @@ function renderHourlyChart(hourlyKwhData) {
     });
 }
 
-// Dynamically populate appliances based on daytime output
+// Dynamically populate appliances based strictly on peak daylight/sun hours
 function populateAppliances(totalKwh) {
     const list = document.getElementById('applianceList');
     list.innerHTML = ''; 
 
-    // Focus strictly on high-draw appliances used during peak solar generation
-    // maxRun is capped to typical daylight hours (6 to 8 hours)
+    // All appliances are strictly bounded to peak solar generation hours (max 5 hours)
     const appliances = [
-        { name: '1.5 Ton DC Inverter AC', consume: 1.2, maxRun: 6, icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
+        { name: '1.5 Ton DC Inverter AC', consume: 1.2, maxRun: 5, icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
         { name: 'Water Pump (1 HP)', consume: 0.75, maxRun: 2, icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
         { name: 'Washing Machine', consume: 0.5, maxRun: 2, icon: 'fa-shirt', color: 'text-purple-500', bg: 'bg-purple-50' },
-        { name: 'Refrigerator', consume: 0.2, maxRun: 8, icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
-        { name: '4 Ceiling Fans', consume: 0.3, maxRun: 8, icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' }
+        { name: 'Refrigerator (Daytime)', consume: 0.2, maxRun: 5, icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
+        { name: '4 Ceiling Fans', consume: 0.3, maxRun: 5, icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' }
     ];
 
     let remainingKwh = totalKwh;
@@ -239,9 +238,7 @@ function populateAppliances(totalKwh) {
         let actualHours = Math.min(possibleHours, app.maxRun);
         
         if (actualHours >= 1) {
-            let runText = actualHours === app.maxRun 
-                ? `Full daylight runtime (~${actualHours} hrs)` 
-                : `~${actualHours} hours during peak sun`;
+            let runText = `~${actualHours} hours during peak sun`;
             
             remainingKwh -= (actualHours * app.consume);
             createApplianceCard(app, runText, list);
@@ -252,7 +249,7 @@ function populateAppliances(totalKwh) {
     if (addedCount === 0) {
         list.innerHTML = `<li class="p-3 border border-amber-100 rounded-lg bg-amber-50 col-span-full">
             <p class="text-sm font-semibold text-amber-800">Low Generation Expected</p>
-            <p class="text-xs text-amber-600">Not enough energy to fully power primary appliances during daylight.</p>
+            <p class="text-xs text-amber-600">Not enough energy to power appliances during peak sun hours.</p>
         </li>`;
     }
 }
