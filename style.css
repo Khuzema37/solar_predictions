@@ -8,18 +8,12 @@ body {
     border: 1px solid rgba(255, 255, 255, 0.2);
     box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.01);
 }
-.gradient-text {
-    background-clip: text;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-}
 .loader {
     border: 3px solid #f3f3f3;
     border-radius: 50%;
     border-top: 3px solid #0d9488;
     width: 24px;
     height: 24px;
-    -webkit-animation: spin 1s linear infinite; /* Safari */
     animation: spin 1s linear infinite;
     display: none;
 }
@@ -33,4 +27,19 @@ body {
 @keyframes fadeIn {
     from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
+}
+
+/* Custom Scrollbar for the Hourly Table */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: #f1f5f9;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 3px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
 }
