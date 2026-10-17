@@ -63,9 +63,8 @@ async def predict_hourly_yield(request: DailyForecastRequest):
             
         hourly_irradiance.append(irradiance_w_m2)
         
-        # Convert Irradiance (W/m²) to Energy (kWh) for this specific hour
-        # Formula: (Irradiance / 1000) * Area * Efficiency
-        kwh = (irradiance_w_m2 / 1000.0) * request.panel_area * request.panel_efficiency
+        performance_ratio = 0.78
+        kwh = ((irradiance_w_m2 / 1000.0) * request.panel_area * request.panel_efficiency) * performance_ratio
         hourly_kwh_yield.append(kwh)
 
     # Sum the 24 hours to get the total daily yield
