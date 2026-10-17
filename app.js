@@ -17,7 +17,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
     }
     
-    // Start time and update every second
     updateCurrentTime();
     setInterval(updateCurrentTime, 1000);
 
@@ -250,23 +249,7 @@ function populateAppliances(hourlyKwhArray, totalDailyKwh) {
         const canRunNow = peakKw >= bundle.requiredKw;
         
         if (canRunNow && displayedCount < 4) {
-            const li = document.createElement('li');
-            li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50 shadow-2xs';
-            li.innerHTML = `
-                <div class="flex-shrink-0 h-20 w-20 rounded-full ${bundle.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
-                    <i class="fa-solid ${bundle.icon} ${bundle.color}"></i>
-                </div>
-                <div class="flex-1 min-w-0">
-                    <p class="text-sm font-semibold text-slate-800 truncate">${bundle.name}</p>
-                    <p class="text-xs text-slate-500 truncate">${bundle.desc}</p>
-                </div>
-                <div class="flex-shrink-0">
-                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[15px] font-bold bg-emerald-100 text-emerald-800">
-                        Safe (~${bundle.requiredKw} kW)
-                    </span>
-                </div>
-            `;
-            list.appendChild(li);
+            createApplianceCard(bundle, list);
             displayedCount++;
         }
     });
@@ -277,6 +260,28 @@ function populateAppliances(hourlyKwhArray, totalDailyKwh) {
             <p class="text-xs text-amber-600">Peak sunlight is too low to safely run heavy simultaneous bundles right now.</p>
         </li>`;
     }
+}
+
+function createApplianceCard(bundle, list) {
+    const li = document.createElement('li');
+    li.className = 'flex items-center justify-between p-4 border border-slate-100 rounded-xl bg-slate-50/50 shadow-2xs gap-4';
+    li.innerHTML = `
+        <div class="flex items-center min-w-0 gap-3.5">
+            <div class="flex-shrink-0 h-10 w-10 rounded-full ${bundle.bg} flex items-center justify-center shadow-sm border border-white">
+                <i class="fa-solid ${bundle.icon} ${bundle.color}"></i>
+            </div>
+            <div class="min-w-0">
+                <p class="text-sm font-bold text-slate-800 leading-snug">${bundle.name}</p>
+                <p class="text-xs text-slate-500 leading-normal mt-0.5">${bundle.desc}</p>
+            </div>
+        </div>
+        <div class="flex-shrink-0">
+            <span class="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 whitespace-nowrap">
+                Safe (~${bundle.requiredKw} kW)
+            </span>
+        </div>
+    `;
+    list.appendChild(li);
 }
 
 function animateValue(id, start, end, duration) {
