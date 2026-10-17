@@ -131,7 +131,7 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
         animateValue("finalKwh", 0, resultData.total_daily_kwh, 1000);
         renderHourlyChart(resultData.hourly_kwh_yield);
         populateHourlyTable(resultData.hourly_irradiance_w_m2, resultData.hourly_kwh_yield);
-        populateAppliances(resultData.total_daily_kwh);
+        populateAppliances(resultData.hourly_kwh_yield, resultData.total_daily_kwh);
 
         document.getElementById('emptyState').classList.add('hidden');
         document.getElementById('populatedState').classList.remove('hidden');
@@ -214,42 +214,82 @@ function renderHourlyChart(hourlyKwhData) {
     });
 }
 
-// Dynamically populate appliances based strictly on peak daylight/sun hours
-function populateAppliances(totalKwh) {
+// Populate simultaneous appliance bundles based on peak hourly kW generation
+function populateAppliances(hourlyKwhArray, totalDailyKwh) {
     const list = document.getElementById('applianceList');
     list.innerHTML = ''; 
 
-    // All appliances are strictly bounded to peak solar generation hours (max 5 hours)
-    const appliances = [
-        { name: '1.5 Ton DC Inverter AC', consume: 1.2, maxRun: 5, icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
-        { name: 'Water Pump (1 HP)', consume: 0.75, maxRun: 2, icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
-        { name: 'Washing Machine', consume: 0.5, maxRun: 2, icon: 'fa-shirt', color: 'text-purple-500', bg: 'bg-purple-50' },
-        { name: 'Refrigerator (Daytime)', consume: 0.2, maxRun: 5, icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
-        { name: '4 Ceiling Fans', consume: 0.3, maxRun: 5, icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' }
+    // Find the peak hourly yield (which equals peak kW generation in that hour)
+    const peakKw = Math.max(...hourlyKwhArray);
+
+    // Define simultaneous bundles with their combined wattage requirements (in kW)
+    const bundles = [
+        {
+            name: "Cooling & Water Pumping",
+            desc: "1.5T AC + 1HP Water Pump + 4 Fans",
+            requiredKw: 2.25,
+            icon: "fa-house-chimney-user",
+            color: "text-blue-500",
+            bg: "bg-blue-50"
+        },
+        {
+            name: "Laundry & Cooling",
+            desc: "1.5T AC + Washing Machine + 4 Fans",
+            requiredKw: 2.0,
+            icon: "fa-shirt",
+            color: "text-purple-500",
+            bg: "bg-purple-50"
+        },
+        {
+            name: "Heavy Ironing Mode",
+            desc: "1.5T AC + Electric Iron + Refrigerator + Fans",
+            requiredKw: 2.7,
+            icon: "fa-bolt",
+            color: "text-amber-500",
+            bg: "bg-amber-50"
+        },
+        {
+            name: "Basic Daytime Load",
+            desc: "Refrigerator + 4 Fans + LED Lights",
+            requiredKw: 0.55,
+            icon: "fa-lightbulb",
+            color: "text-teal-500",
+            bg: "bg-teal-50"
+        }
     ];
 
-    let remainingKwh = totalKwh;
-    let addedCount = 0;
+    let displayedCount = 0;
 
-    appliances.forEach(app => {
-        if (remainingKwh < app.consume || addedCount >= 4) return;
+    bundles.forEach(bundle => {
+        // Check if current peak solar generation can support this simultaneous load
+        const canRunNow = peakKw >= bundle.requiredKw;
         
-        let possibleHours = Math.floor(remainingKwh / app.consume);
-        let actualHours = Math.min(possibleHours, app.maxRun);
-        
-        if (actualHours >= 1) {
-            let runText = `~${actualHours} hours during peak sun`;
-            
-            remainingKwh -= (actualHours * app.consume);
-            createApplianceCard(app, runText, list);
-            addedCount++;
+        if (canRunNow && displayedCount < 4) {
+            const li = document.createElement('li');
+            li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50 shadow-2xs';
+            li.innerHTML = `
+                <div class="flex-shrink-0 h-10 w-10 rounded-full ${bundle.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
+                    <i class="fa-solid ${bundle.icon} ${bundle.color}"></i>
+                </div>
+                <div class="flex-1 min-w-0">
+                    <p class="text-sm font-semibold text-slate-800 truncate">${bundle.name}</p>
+                    <p class="text-xs text-slate-500 truncate">${bundle.desc}</p>
+                </div>
+                <div class="flex-shrink-0">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                        Safe (~${bundle.requiredKw} kW)
+                    </span>
+                </div>
+            `;
+            list.appendChild(li);
+            displayedCount++;
         }
     });
 
-    if (addedCount === 0) {
+    if (displayedCount === 0) {
         list.innerHTML = `<li class="p-3 border border-amber-100 rounded-lg bg-amber-50 col-span-full">
-            <p class="text-sm font-semibold text-amber-800">Low Generation Expected</p>
-            <p class="text-xs text-amber-600">Not enough energy to power appliances during peak sun hours.</p>
+            <p class="text-sm font-semibold text-amber-800">Low Peak Generation</p>
+            <p class="text-xs text-amber-600">Peak sunlight is too low to safely run heavy simultaneous bundles right now.</p>
         </li>`;
     }
 }
