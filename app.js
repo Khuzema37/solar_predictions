@@ -1,25 +1,41 @@
+// Global variables
 let hourlyWeatherPayload = [];
 let yieldChartInstance = null;
 
 document.addEventListener("DOMContentLoaded", async () => {
-    const LAT = 29.39; // Bahawalpur
-    const LON = 71.67; 
+    // 1. Live Clock Function
+    function updateCurrentTime() {
+        const timeElement = document.getElementById('current_time_display');
+        if (timeElement) {
+            const now = new Date();
+            timeElement.innerText = now.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                hour12: true
+            });
+        }
+    }
+    
+    // Start time and update every second
+    updateCurrentTime();
+    setInterval(updateCurrentTime, 1000);
+
+    // 2. Fetch Tomorrow's Weather Details
+    const LAT = 29.39; // Bahawalpur Latitude
+    const LON = 71.67; // Bahawalpur Longitude
     
     try {
-        // Added weather_code to the hourly request
-        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover,is_day,weather_code&forecast_days=2&timezone=Asia%2FKarachi`;
+        // Fetch daily forecasts (max temperature, total precipitation, weather code) + hourly data for the model
+        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover,is_day&forecast_days=2&timezone=Asia%2FKarachi`;
         
         const weatherResponse = await fetch(weatherUrl);
         const weatherData = await weatherResponse.json();
 
-        // 1. Get current hour and find the matching index for TOMORROW
-        const now = new Date();
-        const currentHour = now.getHours();
-        const targetHourIndex = 24 + currentHour; // Tomorrow starts at index 24 in the array
-
-        // 2. Fetch specific weather for tomorrow at this exact time
-        const weatherCode = weatherData.hourly.weather_code[targetHourIndex];
-        const tempAtTime = weatherData.hourly.temperature_2m[targetHourIndex];
+        // Tomorrow is index 1 in Open-Meteo daily arrays
+        const weatherCode = weatherData.daily.weather_code[1];
+        const maxTemp = weatherData.daily.temperature_2m_max[1];
+        const totalPrecip = weatherData.daily.precipitation_sum[1];
         
         function getWeatherUI(code) {
             if (code === 0) return { text: 'Clear Sky', icon: '☀️' };
@@ -32,21 +48,25 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
 
         const ui = getWeatherUI(weatherCode);
-        
-        // Format time for the banner (e.g., 11:00 PM)
-        const ampm = currentHour >= 12 ? 'PM' : 'AM';
-        const displayHour = currentHour % 12 || 12;
-        
-        document.querySelector('#weather_description').previousElementSibling.innerText = `Tomorrow at ${displayHour}:00 ${ampm}`;
-        document.getElementById('weather_description').innerText = `${ui.text} (${tempAtTime}°C)`;
-        document.getElementById('weather_icon').innerText = ui.icon;
 
-        // 3. Build the 24-hour payload for tomorrow (for the AI model)
+        // Update UI Banner elements
+        const descEl = document.getElementById('weather_description');
+        const iconEl = document.getElementById('weather_icon');
+        const tempEl = document.getElementById('temp_display');
+        const precipEl = document.getElementById('precip_display');
+
+        if(descEl) descEl.innerText = ui.text;
+        if(iconEl) iconEl.innerText = ui.icon;
+        if(tempEl) tempEl.innerText = `${maxTemp.toFixed(1)} °C`;
+        if(precipEl) precipEl.innerText = `${totalPrecip.toFixed(1)} mm`;
+
+        // Build the 24-hour payload for tomorrow (Index 24 to 47 for XGBoost model)
         hourlyWeatherPayload = [];
         const hourly = weatherData.hourly;
         
         for (let i = 24; i < 48; i++) {
             const cloudCoverPct = hourly.cloud_cover[i] || 0;
+            // Convert Cloud Cover percentage into Clearness Index (ALLSKY_KT)
             const estimatedKt = Math.max(0, Math.min(1.0, (100 - cloudCoverPct) / 100));
 
             hourlyWeatherPayload.push({
@@ -60,29 +80,36 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
         
     } catch (error) {
-        console.error('Error fetching weather:', error);
-        document.getElementById('weather_description').innerText = "Data Unavailable";
-        document.getElementById('weather_icon').innerText = "⚠️";
+        console.error('Error fetching weather details:', error);
+        const descEl = document.getElementById('weather_description');
+        const iconEl = document.getElementById('weather_icon');
+        if(descEl) descEl.innerText = "Data Unavailable";
+        if(iconEl) iconEl.innerText = "⚠️";
     }
 });
 
+// Handle Form Submission
 document.getElementById('predictionForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
-    if (hourlyWeatherPayload.length === 0) return alert("Weather data loading...");
+    if (hourlyWeatherPayload.length === 0) {
+        return alert("Weather data is still loading or failed to load. Please refresh the page.");
+    }
 
     const btnLoader = document.getElementById('btnLoader');
     const btnIcon = document.getElementById('btnIcon');
     const submitBtn = this.querySelector('button[type="submit"]');
+    const apiStatusText = document.getElementById('apiStatusText');
     
     btnLoader.style.display = 'block';
     btnIcon.style.display = 'none';
+    if(apiStatusText) apiStatusText.classList.remove('hidden');
     submitBtn.disabled = true;
 
     // Fixed calculations
     const systemKw = parseFloat(document.getElementById('systemKw').value);
     const fixedEfficiency = 0.20; 
-    // Area = kW / Efficiency
+    // Calculate physical Area: Area = kW / Efficiency
     const calculatedArea = systemKw / fixedEfficiency;
 
     try {
@@ -100,6 +127,7 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
 
         const resultData = await response.json();
 
+        // Update UI Dashboards
         animateValue("finalKwh", 0, resultData.total_daily_kwh, 1000);
         renderHourlyChart(resultData.hourly_kwh_yield);
         populateHourlyTable(resultData.hourly_irradiance_w_m2, resultData.hourly_kwh_yield);
@@ -111,14 +139,16 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
 
     } catch (error) {
         console.error('Error:', error);
-        alert("Failed to connect to backend.");
+        alert("Connection Error: Failed to connect to the prediction backend.");
     } finally {
         btnLoader.style.display = 'none';
         btnIcon.style.display = 'block';
+        if(apiStatusText) apiStatusText.classList.add('hidden');
         submitBtn.disabled = false;
     }
 });
 
+// Populate the hour-by-hour forecast table
 function populateHourlyTable(irradianceArray, kwhArray) {
     const tableBody = document.getElementById('hourlyTableBody');
     tableBody.innerHTML = ''; 
@@ -127,7 +157,7 @@ function populateHourlyTable(irradianceArray, kwhArray) {
     for (let hour = 0; hour < 24; hour++) {
         const irradiance = irradianceArray[hour];
         
-        // Hide night hours completely
+        // Hide night hours completely from the table
         if (irradiance === 0) continue;
 
         const kwh = kwhArray[hour];
@@ -166,11 +196,15 @@ function renderHourlyChart(hourlyKwhData) {
                 data: hourlyKwhData,
                 borderColor: '#0d9488',
                 backgroundColor: 'rgba(13, 148, 136, 0.15)',
-                borderWidth: 3, fill: true, tension: 0.4, pointRadius: 3
+                borderWidth: 3, 
+                fill: true, 
+                tension: 0.4, 
+                pointRadius: 3
             }]
         },
         options: {
-            responsive: true, maintainAspectRatio: false,
+            responsive: true, 
+            maintainAspectRatio: false,
             plugins: { legend: { display: false } },
             scales: {
                 x: { grid: { display: false } },
@@ -180,6 +214,7 @@ function renderHourlyChart(hourlyKwhData) {
     });
 }
 
+// Dynamically populate appliances based on output
 function populateAppliances(totalKwh) {
     const list = document.getElementById('applianceList');
     list.innerHTML = ''; 
@@ -228,6 +263,7 @@ function populateAppliances(totalKwh) {
     }
 }
 
+// Helper to create appliance DOM element
 function createApplianceCard(app, runText, list) {
     const li = document.createElement('li');
     li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50';
@@ -248,9 +284,11 @@ function createApplianceCard(app, runText, list) {
     list.appendChild(li);
 }
 
+// Smooth counting animation for numerical displays
 function animateValue(id, start, end, duration) {
     if (start === end) return;
     let obj = document.getElementById(id);
+    if (!obj) return;
     let startTimestamp = null;
     const step = (timestamp) => {
         if (!startTimestamp) startTimestamp = timestamp;
