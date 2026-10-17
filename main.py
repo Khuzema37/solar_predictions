@@ -63,7 +63,7 @@ async def predict_hourly_yield(request: DailyForecastRequest):
             
         hourly_irradiance.append(irradiance_w_m2)
         
-        performance_ratio = 0.78
+        performance_ratio = 0.7
         kwh = ((irradiance_w_m2 / 1000.0) * request.panel_area * request.panel_efficiency) * performance_ratio
         hourly_kwh_yield.append(kwh)
 
