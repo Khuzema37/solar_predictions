@@ -1,55 +1,79 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-import joblib
-import pandas as pd
+from typing import List
+import xgboost as xgb
+import numpy as np
 
-app = FastAPI()
+# 1. Initialize the FastAPI app
+app = FastAPI(title="Solar Yield Prediction API")
 
-# Enable CORS for your GitHub Pages frontend
+# Allow frontend requests (Update origins in production)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], 
-    allow_credentials=False,
+    allow_origins=["*"],
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Load the newly trained V2 model with the Clearness Index
-model = joblib.load('bahawalpur_solar_model_v2.pkl')
+# 2. Load the trained XGBoost model
+print("Loading XGBoost model...")
+xgb_model = xgb.XGBRegressor()
+xgb_model.load_model("model.json")
 
-# Updated input schema with ALLSKY_KT
-class WeatherInput(BaseModel):
-    T2M: float
-    RH2M: float
-    WS2M: float
-    PRECTOTCORR: float
-    ALLSKY_KT: float
-    system_kw: float
+# 3. Define the expected data structures using Pydantic
+class HourlyWeather(BaseModel):
+    t2m: float
+    rh2m: float
+    ws10m: float
+    prectotcorr: float
+    allsky_kt: float
+    is_day: int  # 1 for daytime, 0 for nighttime
 
-@app.get("/")
-def read_root():
-    return {"status": "ZEMA Solar API is running with the upgraded V2 model"}
+class DailyForecastRequest(BaseModel):
+    hourly_data: List[HourlyWeather]
+    panel_area: float      # in square meters (m²)
+    panel_efficiency: float # e.g., 0.20 for 20%
 
+# 4. Create the prediction endpoint
 @app.post("/predict")
-def predict_yield(data: WeatherInput):
-    # Format the incoming 5 variables for the Random Forest
-    input_df = pd.DataFrame([{
-        'T2M': data.T2M,
-        'RH2M': data.RH2M,
-        'WS2M': data.WS2M,
-        'PRECTOTCORR': data.PRECTOTCORR,
-        'ALLSKY_KT': data.ALLSKY_KT
-    }])
+async def predict_hourly_yield(request: DailyForecastRequest):
+    hourly_irradiance = []
+    hourly_kwh_yield = []
     
-    # Predict the irradiance
-    irradiance_pred = model.predict(input_df)[0]
-    
-    # Physical system calculations (Area based on 550W panels, 22% efficiency)
-    area_m2 = (data.system_kw * 1000 / 550) * 2.58
-    estimated_yield = irradiance_pred * area_m2 * 0.22
-    
+    # Process each of the 24 hours
+    for hour_data in request.hourly_data:
+        # Dynamic Gatekeeper: Check if the sun is up
+        if hour_data.is_day == 0:
+            irradiance_w_m2 = 0.0
+        else:
+            # Format features for the model exactly as trained: ['T2M', 'RH2M', 'WS10M', 'PRECTOTCORR', 'ALLSKY_KT']
+            features = np.array([[
+                hour_data.t2m,
+                hour_data.rh2m,
+                hour_data.ws10m,
+                hour_data.prectotcorr,
+                hour_data.allsky_kt
+            ]])
+            
+            # Predict irradiance (W/m²) and ensure it doesn't dip below 0
+            prediction = xgb_model.predict(features)[0]
+            irradiance_w_m2 = max(0.0, float(prediction))
+            
+        hourly_irradiance.append(irradiance_w_m2)
+        
+        # Convert Irradiance (W/m²) to Energy (kWh) for this specific hour
+        # Formula: (Irradiance / 1000) * Area * Efficiency
+        kwh = (irradiance_w_m2 / 1000.0) * request.panel_area * request.panel_efficiency
+        hourly_kwh_yield.append(kwh)
+
+    # Sum the 24 hours to get the total daily yield
+    total_daily_kwh = sum(hourly_kwh_yield)
+
     return {
-        "raw_irradiance_kwh_m2": round(irradiance_pred, 3),
-        "estimated_yield_kwh": round(estimated_yield, 2)
+        "status": "success",
+        "total_daily_kwh": round(total_daily_kwh, 2),
+        "hourly_irradiance_w_m2": [round(val, 2) for val in hourly_irradiance],
+        "hourly_kwh_yield": [round(val, 3) for val in hourly_kwh_yield]
     }
