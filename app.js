@@ -26,7 +26,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const LON = 71.67; // Bahawalpur Longitude
     
     try {
-        // Fetch daily forecasts (max temperature, total precipitation, weather code) + hourly data for the model
+        // Fetch daily forecasts (max temp, total precip, weather code) + hourly data for the model
         const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=temperature_2m_max,precipitation_sum,weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover,is_day&forecast_days=2&timezone=Asia%2FKarachi`;
         
         const weatherResponse = await fetch(weatherUrl);
@@ -106,7 +106,7 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
     if(apiStatusText) apiStatusText.classList.remove('hidden');
     submitBtn.disabled = true;
 
-    // Fixed calculations
+    // Fixed calculations using System Size (kW)
     const systemKw = parseFloat(document.getElementById('systemKw').value);
     const fixedEfficiency = 0.20; 
     // Calculate physical Area: Area = kW / Efficiency
@@ -150,151 +150,4 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
 
 // Populate the hour-by-hour forecast table
 function populateHourlyTable(irradianceArray, kwhArray) {
-    const tableBody = document.getElementById('hourlyTableBody');
-    tableBody.innerHTML = ''; 
-    let rowCount = 0;
-
-    for (let hour = 0; hour < 24; hour++) {
-        const irradiance = irradianceArray[hour];
-        
-        // Hide night hours completely from the table
-        if (irradiance === 0) continue;
-
-        const kwh = kwhArray[hour];
-        const timeLabel = `${String(hour).padStart(2, '0')}:00`;
-
-        const tr = document.createElement('tr');
-        tr.className = rowCount % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
-        rowCount++;
-
-        let badgeHtml = irradiance > 500 
-            ? `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Peak Yield</span>`
-            : `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800">Moderate</span>`;
-
-        tr.innerHTML = `
-            <td class="py-2 px-3 font-semibold text-slate-700">${timeLabel}</td>
-            <td class="py-2 px-3 text-slate-600">${irradiance.toFixed(1)} W/m²</td>
-            <td class="py-2 px-3 font-bold text-teal-700">${kwh.toFixed(3)} kWh</td>
-            <td class="py-2 px-3 text-right">${badgeHtml}</td>
-        `;
-        tableBody.appendChild(tr);
-    }
-}
-
-// Render Chart.js line graph
-function renderHourlyChart(hourlyKwhData) {
-    const ctx = document.getElementById('hourlyYieldChart').getContext('2d');
-    const hoursLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
-    if (yieldChartInstance) yieldChartInstance.destroy();
-
-    yieldChartInstance = new Chart(ctx, {
-        type: 'line',
-        data: {
-            labels: hoursLabels,
-            datasets: [{
-                label: 'Hourly Output (kWh)',
-                data: hourlyKwhData,
-                borderColor: '#0d9488',
-                backgroundColor: 'rgba(13, 148, 136, 0.15)',
-                borderWidth: 3, 
-                fill: true, 
-                tension: 0.4, 
-                pointRadius: 3
-            }]
-        },
-        options: {
-            responsive: true, 
-            maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
-            scales: {
-                x: { grid: { display: false } },
-                y: { beginAtZero: true }
-            }
-        }
-    });
-}
-
-// Dynamically populate appliances based on output
-function populateAppliances(totalKwh) {
-    const list = document.getElementById('applianceList');
-    list.innerHTML = ''; 
-
-    // Realistic energy allocation (kWh per hour or per day)
-    const appliances = [
-        { name: 'Refrigerator', consume: 2.0, type: 'daily', maxRun: 24, icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
-        { name: 'Water Pump (1 HP)', consume: 0.75, type: 'hourly', maxRun: 2, icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
-        { name: 'Basic Lighting & TV', consume: 0.5, type: 'hourly', maxRun: 6, icon: 'fa-lightbulb', color: 'text-amber-500', bg: 'bg-amber-50' },
-        { name: '4 Ceiling Fans', consume: 0.3, type: 'hourly', maxRun: 12, icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' },
-        { name: '1.5 Ton DC Inverter AC', consume: 1.2, type: 'hourly', maxRun: 12, icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' }
-    ];
-
-    let remainingKwh = totalKwh;
-    let addedCount = 0;
-
-    appliances.forEach(app => {
-        if (remainingKwh <= 0.5 || addedCount >= 4) return;
-        
-        let runText = "";
-        
-        if (app.type === 'daily' && remainingKwh >= app.consume) {
-            runText = "Full 24 hours runtime";
-            remainingKwh -= app.consume;
-            createApplianceCard(app, runText, list);
-            addedCount++;
-        } else if (app.type === 'hourly') {
-            // Calculate how many hours we can afford
-            let possibleHours = Math.floor(remainingKwh / app.consume);
-            let actualHours = Math.min(possibleHours, app.maxRun);
-            
-            if (actualHours >= 1) {
-                runText = `~${actualHours} hours runtime`;
-                remainingKwh -= (actualHours * app.consume);
-                createApplianceCard(app, runText, list);
-                addedCount++;
-            }
-        }
-    });
-
-    if (addedCount === 0) {
-        list.innerHTML = `<li class="p-3 border border-amber-100 rounded-lg bg-amber-50 col-span-full">
-            <p class="text-sm font-semibold text-amber-800">Low Generation Expected</p>
-            <p class="text-xs text-amber-600">Not enough energy to fully power primary appliances.</p>
-        </li>`;
-    }
-}
-
-// Helper to create appliance DOM element
-function createApplianceCard(app, runText, list) {
-    const li = document.createElement('li');
-    li.className = 'flex items-center p-3 border border-slate-100 rounded-lg bg-slate-50/50';
-    li.innerHTML = `
-        <div class="flex-shrink-0 h-10 w-10 rounded-full ${app.bg} flex items-center justify-center mr-4 shadow-sm border border-white">
-            <i class="fa-solid ${app.icon} ${app.color}"></i>
-        </div>
-        <div class="flex-1 min-w-0">
-            <p class="text-sm font-semibold text-slate-800 truncate">${app.name}</p>
-            <p class="text-xs text-slate-500 truncate">${runText}</p>
-        </div>
-        <div class="flex-shrink-0">
-            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-100 text-teal-800">
-                Covered
-            </span>
-        </div>
-    `;
-    list.appendChild(li);
-}
-
-// Smooth counting animation for numerical displays
-function animateValue(id, start, end, duration) {
-    if (start === end) return;
-    let obj = document.getElementById(id);
-    if (!obj) return;
-    let startTimestamp = null;
-    const step = (timestamp) => {
-        if (!startTimestamp) startTimestamp = timestamp;
-        const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-        obj.innerHTML = (progress * (end - start) + start).toFixed(1);
-        if (progress < 1) window.requestAnimationFrame(step);
-    };
-    window.requestAnimationFrame(step);
-}
+    const tableBody = document
