@@ -1,4 +1,3 @@
-// Global variable to store tomorrow's hourly weather arrays
 let hourlyWeatherPayload = [];
 let yieldChartInstance = null;
 
@@ -7,13 +6,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     const LON = 71.67; // Bahawalpur Longitude
     
     try {
-        // Fetch daily weather code for the UI banner + 24 hourly arrays for the model
+        // Fetch daily weather code + 24 hourly weather arrays aligned with Asia/Karachi
         const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${LAT}&longitude=${LON}&daily=weather_code&hourly=temperature_2m,relative_humidity_2m,wind_speed_10m,precipitation,cloud_cover,is_day&forecast_days=2&timezone=Asia%2FKarachi`;
         
         const weatherResponse = await fetch(weatherUrl);
         const weatherData = await weatherResponse.json();
 
-        // Update UI Banner using tomorrow's daily weather code (Index 1)
+        // Update Weather Banner using tomorrow's daily weather code (Index 1)
         const weatherCode = weatherData.daily.weather_code[1];
         
         function getWeatherUI(code) {
@@ -30,13 +29,13 @@ document.addEventListener("DOMContentLoaded", async () => {
         document.getElementById('weather_description').innerText = ui.text;
         document.getElementById('weather_icon').innerText = ui.icon;
 
-        // Build the 24-hour payload for tomorrow (Hours 24 to 47 in the array)
+        // Build the 24-hour payload for tomorrow (Hours 24 through 47 in Open-Meteo's array)
         hourlyWeatherPayload = [];
         const hourly = weatherData.hourly;
         
         for (let i = 24; i < 48; i++) {
             const cloudCoverPct = hourly.cloud_cover[i] || 0;
-            // Convert Cloud Cover to Clearness Index (ALLSKY_KT)
+            // Convert Cloud Cover percentage into Clearness Index (ALLSKY_KT)
             const estimatedKt = Math.max(0, Math.min(1.0, (100 - cloudCoverPct) / 100));
 
             hourlyWeatherPayload.push({
@@ -64,7 +63,7 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
         return;
     }
 
-    // UI Loading State
+    // Toggle Loading State
     const btnLoader = document.getElementById('btnLoader');
     const btnIcon = document.getElementById('btnIcon');
     const submitBtn = this.querySelector('button[type="submit"]');
@@ -74,18 +73,15 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
     btnIcon.style.display = 'none';
     apiStatusText.classList.remove('hidden');
     submitBtn.disabled = true;
-    submitBtn.classList.add('opacity-90');
 
     const panelArea = parseFloat(document.getElementById('panelArea').value);
     const panelEfficiency = parseFloat(document.getElementById('panelEfficiency').value);
 
     try {
-        // Send the complete hourly payload to the FastAPI XGBoost backend
+        // Send request payload to XGBoost FastAPI Render endpoint
         const response = await fetch('https://solar-predictions.onrender.com/predict', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 hourly_data: hourlyWeatherPayload,
                 panel_area: panelArea,
@@ -99,33 +95,68 @@ document.getElementById('predictionForm').addEventListener('submit', async funct
 
         const resultData = await response.json();
 
-        // Animate total yield
+        // 1. Animate total yield display
         animateValue("finalKwh", 0, resultData.total_daily_kwh, 1000);
 
-        // Render the hourly generation chart
+        // 2. Render 24-Hour Line Chart
         renderHourlyChart(resultData.hourly_kwh_yield);
 
-        // Populate appliances based on the total daily output
+        // 3. Populate Hour-by-Hour Table
+        populateHourlyTable(resultData.hourly_irradiance_w_m2, resultData.hourly_kwh_yield);
+
+        // 4. Populate Appliances Covered
         populateAppliances(resultData.total_daily_kwh);
 
-        // Switch Views
+        // Switch to Populated View
         document.getElementById('emptyState').classList.add('hidden');
         document.getElementById('populatedState').classList.remove('hidden');
         document.getElementById('populatedState').classList.add('flex');
 
     } catch (error) {
         console.error('Error fetching prediction:', error);
-        alert("Connection Error: Failed to connect to the prediction model. Please ensure your Render API is live.");
+        alert("Connection Error: Failed to connect to the prediction backend.");
     } finally {
-        // Reset button state
         btnLoader.style.display = 'none';
         btnIcon.style.display = 'block';
         apiStatusText.classList.add('hidden');
         submitBtn.disabled = false;
-        submitBtn.classList.remove('opacity-90');
     }
 });
 
+// Populate the hour-by-hour forecast table
+function populateHourlyTable(irradianceArray, kwhArray) {
+    const tableBody = document.getElementById('hourlyTableBody');
+    tableBody.innerHTML = ''; // Clear previous content
+
+    for (let hour = 0; hour < 24; hour++) {
+        const timeLabel = `${String(hour).padStart(2, '0')}:00`;
+        const irradiance = irradianceArray[hour];
+        const kwh = kwhArray[hour];
+
+        const tr = document.createElement('tr');
+        tr.className = hour % 2 === 0 ? 'bg-white' : 'bg-slate-50/50';
+
+        let badgeHtml = '';
+        if (irradiance === 0) {
+            badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-500">Night</span>`;
+        } else if (irradiance > 500) {
+            badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800">Peak Yield</span>`;
+        } else {
+            badgeHtml = `<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-100 text-teal-800">Moderate</span>`;
+        }
+
+        tr.innerHTML = `
+            <td class="py-2 px-3 font-semibold text-slate-700">${timeLabel}</td>
+            <td class="py-2 px-3 text-slate-600">${irradiance.toFixed(1)} W/m²</td>
+            <td class="py-2 px-3 font-bold text-teal-700">${kwh.toFixed(3)} kWh</td>
+            <td class="py-2 px-3 text-right">${badgeHtml}</td>
+        `;
+
+        tableBody.appendChild(tr);
+    }
+}
+
+// Render Chart.js line graph
 function renderHourlyChart(hourlyKwhData) {
     const ctx = document.getElementById('hourlyYieldChart').getContext('2d');
     const hoursLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}:00`);
@@ -167,16 +198,17 @@ function renderHourlyChart(hourlyKwhData) {
     });
 }
 
+// Populate appliance list based on total daily yield
 function populateAppliances(kwh) {
     const list = document.getElementById('applianceList');
     list.innerHTML = ''; 
 
     const appliances = [
-        { name: '1.5 Ton DC Inverter AC', threshold: 18, desc: '~12 hours', icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
-        { name: 'Refrigerator', threshold: 3, desc: '24 hours', icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
-        { name: 'Water Pump (1 HP)', threshold: 1.5, desc: '~1.5 hours', icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
-        { name: '4 Ceiling Fans', threshold: 2, desc: '12 hours', icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' },
-        { name: 'Basic Lighting & TV', threshold: 1, desc: '6 hours', icon: 'fa-lightbulb', color: 'text-amber-500', bg: 'bg-amber-50' }
+        { name: '1.5 Ton DC Inverter AC', threshold: 18, desc: '~12 hours runtime', icon: 'fa-snowflake', color: 'text-blue-500', bg: 'bg-blue-50' },
+        { name: 'Refrigerator', threshold: 3, desc: 'Full 24 hours runtime', icon: 'fa-icicles', color: 'text-cyan-500', bg: 'bg-cyan-50' },
+        { name: 'Water Pump (1 HP)', threshold: 1.5, desc: '~1.5 hours runtime', icon: 'fa-faucet-drip', color: 'text-indigo-500', bg: 'bg-indigo-50' },
+        { name: '4 Ceiling Fans', threshold: 2, desc: '12 hours runtime', icon: 'fa-fan', color: 'text-slate-500', bg: 'bg-slate-100' },
+        { name: 'Basic Lighting & TV', threshold: 1, desc: '6 hours evening usage', icon: 'fa-lightbulb', color: 'text-amber-500', bg: 'bg-amber-50' }
     ];
 
     let addedCount = 0;
@@ -206,7 +238,7 @@ function populateAppliances(kwh) {
         }
     });
 
-    if(addedCount === 0) {
+    if (addedCount === 0) {
         const li = document.createElement('li');
         li.className = 'flex items-center p-3 border border-amber-100 rounded-lg bg-amber-50 col-span-full';
         li.innerHTML = `
@@ -215,13 +247,14 @@ function populateAppliances(kwh) {
             </div>
             <div class="flex-1 min-w-0">
                 <p class="text-sm font-semibold text-amber-800">Low Generation Expected</p>
-                <p class="text-xs text-amber-600">Consider reducing appliance usage.</p>
+                <p class="text-xs text-amber-600">Consider reducing appliance usage or switching to grid backup.</p>
             </div>
         `;
         list.appendChild(li);
     }
 }
 
+// Smooth counting animation for numerical displays
 function animateValue(id, start, end, duration) {
     if (start === end) return;
     let obj = document.getElementById(id);
@@ -229,7 +262,6 @@ function animateValue(id, start, end, duration) {
     const step = (timestamp) => {
         if (!startTimestamp) startTimestamp = timestamp;
         const progress = Math.min((timestamp - startTimestamp) / duration, 1);
-        const easeOut = 1 - Math.pow(1 - progress, 3);
         const current = progress * (end - start) + start;
         obj.innerHTML = current.toFixed(1);
         if (progress < 1) {
