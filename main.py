@@ -94,3 +94,4 @@ def get_forecast():
         TILT,
         AZIMUTH,
         tuple(variables)
+    )
