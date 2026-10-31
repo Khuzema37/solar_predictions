@@ -1,0 +1,28 @@
+{
+    "features": [
+        "temperature_2m",
+        "relative_humidity_2m",
+        "cloud_cover",
+        "shortwave_radiation",
+        "direct_normal_irradiance",
+        "diffuse_radiation",
+        "global_tilted_irradiance",
+        "wind_speed_10m",
+        "precipitation",
+        "hour_sin",
+        "hour_cos",
+        "day_sin",
+        "day_cos"
+    ],
+    "target": "estimated_energy_kwh",
+    "training_period": "2020-2023",
+    "validation_period": "2024",
+    "testing_period": "2025",
+    "model_type": "XGBoost",
+    "target_type": "physics_simulated",
+    "best_iteration": 998,
+    "inverter_kw": 5.0,
+    "mae": 0.0035004804267421623,
+    "rmse": 0.006814905337143634,
+    "r2": 0.9999643786166873
+}
