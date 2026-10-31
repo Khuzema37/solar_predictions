@@ -1,7 +1,6 @@
 """Solar forecast API. Run: uvicorn main:app --reload"""
 import json
 import os
-from datetime import datetime, timedelta
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -12,7 +11,9 @@ import xgboost as xgb
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
-import time
+import threading
+from email.utils import parsedate_to_datetime
+from datetime import datetime, timedelta, timezone
 
 WEATHER_CACHE = {}
 CACHE_TTL_SECONDS = 3600  # 1 hour
