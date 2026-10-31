@@ -28,8 +28,16 @@ NOCT = 45.0
 TEMP_COEFFICIENT = -0.0035
 
 app = FastAPI(title='Solar Energy Forecast API', version='2.0')
-origins = [v.strip() for v in os.getenv('CORS_ORIGINS', 'http://localhost:5500,http://127.0.0.1:5500,http://localhost:8000,http://127.0.0.1:8000').split(',') if v.strip()]
-app.add_middleware(CORSMiddleware, allow_origins=origins, allow_methods=['GET'], allow_headers=['*'])
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://khuzemaqayyum.me",
+        "https://khuzema37.github.io"
+    ],
+    allow_credentials=False,
+    allow_methods=["GET"],
+    allow_headers=["*"],
+)
 
 @app.get('/health')
 def health():
