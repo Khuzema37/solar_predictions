@@ -12,6 +12,12 @@ import xgboost as xgb
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+import time
+
+WEATHER_CACHE = {}
+CACHE_TTL_SECONDS = 3600  # 1 hour
+WEATHER_LOCK = threading.Lock()
+
 BASE = Path(__file__).resolve().parent
 MODEL_PATH = BASE / 'models' / 'solar_xgboost.json'
 META_PATH = BASE / 'models' / 'model_metadata.json'
@@ -49,31 +55,204 @@ def system():
             'performance_ratio': PR, 'tilt_degrees': TILT, 'azimuth_degrees': AZIMUTH,
             'latitude': LATITUDE, 'longitude': LONGITUDE, 'timezone': TZ}
 
+
 def get_forecast():
+
     date = datetime.now(ZoneInfo(TZ)).date() + timedelta(days=1)
-    variables = ['temperature_2m', 'relative_humidity_2m', 'cloud_cover', 'shortwave_radiation',
-                 'direct_normal_irradiance', 'diffuse_radiation', 'global_tilted_irradiance',
-                 'wind_speed_10m', 'precipitation']
-    params = {'latitude': LATITUDE, 'longitude': LONGITUDE, 'hourly': ','.join(variables),
-              'daily': 'temperature_2m_max,precipitation_sum,weather_code', 'timezone': TZ,
-              'tilt': TILT, 'azimuth': AZIMUTH, 'start_date': date.isoformat(), 'end_date': date.isoformat()}
-    try:
-        response = requests.get('https://api.open-meteo.com/v1/forecast', params=params, timeout=30)
-        response.raise_for_status()
-        payload = response.json()
-        if payload.get('error'):
-            raise ValueError(payload.get('reason', 'Open-Meteo error'))
-        df = pd.DataFrame(payload['hourly'])
-        df['time'] = pd.to_datetime(df['time'], format='%Y-%m-%dT%H:%M')
-        if len(df) != 24 or df[variables].isna().any().any():
-            raise ValueError('Forecast must contain 24 complete hourly records')
-        daily = payload['daily']
-        outlook = {'max_temperature_c': float(daily['temperature_2m_max'][0]),
-                   'precipitation_mm': float(daily['precipitation_sum'][0]),
-                   'weather_code': int(daily['weather_code'][0])}
-        return date, df, outlook
-    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
-        raise HTTPException(status_code=502, detail=f'Weather forecast unavailable: {exc}') from exc
+
+    variables = [
+        'temperature_2m',
+        'relative_humidity_2m',
+        'cloud_cover',
+        'shortwave_radiation',
+        'direct_normal_irradiance',
+        'diffuse_radiation',
+        'global_tilted_irradiance',
+        'wind_speed_10m',
+        'precipitation'
+    ]
+
+    params = {
+        'latitude': LATITUDE,
+        'longitude': LONGITUDE,
+        'hourly': ','.join(variables),
+        'daily': 'temperature_2m_max,precipitation_sum,weather_code',
+        'timezone': TZ,
+        'tilt': TILT,
+        'azimuth': AZIMUTH,
+        'start_date': date.isoformat(),
+        'end_date': date.isoformat()
+    }
+
+    cache_key = (
+        date.isoformat(),
+        LATITUDE,
+        LONGITUDE,
+        TZ,
+        TILT,
+        AZIMUTH,
+        tuple(variables)
+    )
+
+    with WEATHER_LOCK:
+
+        now = time.time()
+        cached = WEATHER_CACHE.get(cache_key)
+
+        # Return cached weather if still fresh.
+        if cached and now < cached["expires_at"]:
+            return (
+                date,
+                cached["df"].copy(),
+                cached["outlook"].copy()
+            )
+
+        # Avoid repeatedly calling Open-Meteo while rate-limited.
+        if cached and now < cached.get("retry_after", 0):
+            return (
+                date,
+                cached["df"].copy(),
+                cached["outlook"].copy()
+            )
+
+        if now < WEATHER_CACHE.get("global_retry_after", 0):
+            if cached:
+                return (
+                    date,
+                    cached["df"].copy(),
+                    cached["outlook"].copy()
+                )
+
+            raise HTTPException(
+                status_code=503,
+                detail="Weather provider is temporarily rate-limited. Please retry later."
+            )
+
+        try:
+
+            response = requests.get(
+                'https://api.open-meteo.com/v1/forecast',
+                params=params,
+                timeout=30
+            )
+
+            # Handle Open-Meteo rate limiting.
+            if response.status_code == 429:
+
+                retry_seconds = 900  # Default: 15 minutes
+                retry_header = response.headers.get("Retry-After")
+
+                if retry_header:
+                    try:
+                        retry_seconds = max(
+                            1,
+                            int(retry_header)
+                        )
+                    except ValueError:
+                        try:
+                            retry_date = parsedate_to_datetime(retry_header)
+                            if retry_date.tzinfo is None:
+                                retry_date = retry_date.replace(tzinfo=timezone.utc)
+                            retry_seconds = max(
+                                1,
+                                int(
+                                    (retry_date - datetime.now(timezone.utc))
+                                    .total_seconds()
+                                )
+                            )
+                        except (TypeError, ValueError, OverflowError):
+                            pass
+
+                WEATHER_CACHE["global_retry_after"] = (
+                    time.time() + retry_seconds
+                )
+
+                if cached:
+                    return (
+                        date,
+                        cached["df"].copy(),
+                        cached["outlook"].copy()
+                    )
+
+                raise HTTPException(
+                    status_code=503,
+                    detail=(
+                        "Open-Meteo rate limit reached. "
+                        "Please retry later."
+                    )
+                )
+
+            response.raise_for_status()
+
+            payload = response.json()
+
+            if payload.get('error'):
+                raise ValueError(
+                    payload.get('reason', 'Open-Meteo error')
+                )
+
+            df = pd.DataFrame(payload['hourly'])
+
+            df['time'] = pd.to_datetime(
+                df['time'],
+                format='%Y-%m-%dT%H:%M'
+            )
+
+            if (
+                len(df) != 24
+                or df[variables].isna().any().any()
+            ):
+                raise ValueError(
+                    'Forecast must contain 24 complete hourly records'
+                )
+
+            daily = payload['daily']
+
+            outlook = {
+                'max_temperature_c': float(
+                    daily['temperature_2m_max'][0]
+                ),
+                'precipitation_mm': float(
+                    daily['precipitation_sum'][0]
+                ),
+                'weather_code': int(
+                    daily['weather_code'][0]
+                )
+            }
+
+            # Save successful forecast in cache.
+            WEATHER_CACHE[cache_key] = {
+                "df": df.copy(),
+                "outlook": outlook.copy(),
+                "expires_at": time.time() + CACHE_TTL_SECONDS
+            }
+
+            return date, df, outlook
+
+        except HTTPException:
+            raise
+
+        except (
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            TypeError,
+            json.JSONDecodeError
+        ) as exc:
+
+            # Use an existing forecast for the same date
+            # when the weather service is temporarily unavailable.
+            if cached:
+                return (
+                    date,
+                    cached["df"].copy(),
+                    cached["outlook"].copy()
+                )
+
+            raise HTTPException(
+                status_code=503,
+                detail=f'Weather forecast temporarily unavailable: {exc}'
+            ) from exc
 
 def physics_estimate(df, capacity, inverter):
     gti = df['global_tilted_irradiance'].clip(lower=0).to_numpy(dtype=float)
