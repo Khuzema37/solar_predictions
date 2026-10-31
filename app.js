@@ -1,6 +1,6 @@
 // Set to your deployed FastAPI URL when the frontend is hosted separately.
 // For local testing with FastAPI serving the frontend, leave this empty.
-const API_BASE = "https://solar-predictions.onrender.com";
+const API_BASE = 'https://solar-predictions.onrender.com';
 let yieldChartInstance = null;
 const byId = id => document.getElementById(id);
 const fmt = (n, digits = 2) => Number(n).toFixed(digits);
