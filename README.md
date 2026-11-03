@@ -1,32 +1,113 @@
-# Updated Solar Forecast Website
+# Solar Energy Forecast — updated XGBoost website
 
-Preserves the original HTML/CSS dashboard, but replaces the old irradiance model with the newly trained hourly energy XGBoost model.
+This package updates the existing Bahawalpur solar forecast website to use the
+trained XGBoost reference model and a parameterized physics estimate. It also
+loads tomorrow's weather preview as soon as the page opens.
 
-## Required model files (not included in this package)
-Copy your own trained files to:
+## Important: add your trained model files
+
+The supplied source files did not include the trained model artifacts. Before
+predictions can work, copy these files into `models/` from your training project:
+
 - `models/solar_xgboost.json`
 - `models/model_metadata.json`
 
-The metadata must contain `features` (in training order) and `best_iteration`. Do **not** use the old `model.json`.
+Do not substitute the old `model.json`. See `models/README.md`.
 
-## Install and run
+## Project structure
 
-```bash
-python -m pip install -r requirements.txt
-uvicorn main:app --reload
+```text
+solar_predictions_updated/
+├── index.html
+├── style.css
+├── app.js
+├── main.py
+├── requirements.txt
+├── .env.example
+└── models/
+    └── README.md
 ```
 
-API docs: http://127.0.0.1:8000/docs
+## Run backend locally in VS Code (Windows PowerShell)
 
-For local frontend testing, serve the frontend separately, e.g. `python -m http.server 5500` from this directory, then open http://127.0.0.1:5500/. Default CORS permits that origin. For a deployed static website, set `window.SOLAR_API_BASE = 'https://YOUR-API-HOST'` in a script tag before `app.js` in `index.html`, and set `CORS_ORIGINS` on the backend to your exact frontend origin (comma-separated if necessary).
+1. Open this folder in VS Code.
+2. Open Terminal → New Terminal.
+3. Create and activate a virtual environment:
 
-Example API: `GET /api/predict/tomorrow?capacity_kwp=5&inverter_kw=5`
+   ```powershell
+   py -3.13 -m venv .venv
+   .\.venv\Scripts\Activate.ps1
+   ```
 
-## Model assumptions
+   If PowerShell blocks activation, use `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass`
+   in that terminal, then activate again.
 
-- Reference XGBoost model was trained on simulated output of a 5 kWp DC / 5 kW AC system.
-- When both DC and AC capacities scale proportionally, reference model output is scaled by `capacity_kwp / 5`.
-- If the inverter-to-panel ratio differs, the API uses a parameterized physics estimator instead, avoiding inaccurate scaling of already-clipped AC output.
-- The configured location is Bahawalpur example coordinates, and the weather features use Open-Meteo `global_tilted_irradiance`, tilt 30 degrees and azimuth 0 (south). Change only if consistent with the training setup, or retrain accordingly.
-- Forecast output is simulated, not validated against measured inverter output.
-- API fetches the forecast server-side. It does not estimate clearness index from cloud cover or multiply rated kWp by panel efficiency again.
+4. Install dependencies:
+
+   ```powershell
+   python -m pip install --upgrade pip
+   pip install -r requirements.txt
+   ```
+
+5. Add the two model files listed above to `models/`.
+6. Start the API:
+
+   ```powershell
+   uvicorn main:app --reload
+   ```
+
+7. Check `http://127.0.0.1:8000/health` and API docs at
+   `http://127.0.0.1:8000/docs`.
+
+## Run the frontend locally
+
+In a second VS Code terminal, from this project folder run:
+
+```powershell
+python -m http.server 5500
+```
+
+Open `http://127.0.0.1:5500`. In `index.html`, set
+`window.SOLAR_API_BASE` to `http://127.0.0.1:8000` while testing locally.
+For production, it is set to `https://solar-predictions.onrender.com`.
+
+## Weather loading and API request behavior
+
+- On page open, `app.js` requests `/api/forecast/tomorrow`.
+- The backend calls the shared `get_forecast()` function.
+- Clicking Calculate calls `/api/predict/tomorrow`, which uses that same
+  server-side in-memory forecast cache.
+- Cache TTL is six hours. A rate-limit cooldown and stale-cache fallback are
+  also implemented in `main.py`.
+- This cache is process-local; if you later run multiple Render instances,
+  move the cache to Redis or another shared cache.
+
+## Deploying
+
+Backend: deploy `main.py` on Render with build command
+`pip install -r requirements.txt` and start command
+`uvicorn main:app --host 0.0.0.0 --port $PORT`. Ensure the model files are
+included in the deployed repository or otherwise available at `models/`.
+
+Frontend: publish `index.html`, `style.css`, and `app.js` using your existing
+GitHub Pages / custom-domain setup. The backend CORS allowlist currently includes
+`https://khuzemaqayyum.me` and `https://khuzema37.github.io`; add the exact
+origin of any other frontend host in `main.py`.
+
+## GitHub + VS Code workflow
+
+If the repository is already cloned, open its folder in VS Code and copy these
+updated files into the matching repository files. Then use Source Control to
+review, commit, and push. If it is not cloned yet, clone your repository using
+`https://github.com/Khuzema37/solar_predictions.git` (instructions are in the
+chat response).
+
+## Model assumptions and limitations
+
+- Reference model: 5 kWp DC panels and 5 kW AC inverter.
+- Proportional capacity scaling is used only when the user's inverter-to-panel
+  ratio matches the reference ratio; other ratios use the physics estimator.
+- Weather source: Open-Meteo forecast API.
+- Site defaults: 29.3956, 71.6836; Asia/Karachi; 30° tilt; azimuth 0°.
+- Forecast generation is a simulation and is not yet validated against measured
+  inverter output.

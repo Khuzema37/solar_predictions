@@ -40,7 +40,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://khuzemaqayyum.me",
-        "https://khuzema37.github.io"
+        "https://khuzema37.github.io",
+        "http://localhost:5500",
+        "http://127.0.0.1:5500"
     ],
     allow_credentials=False,
     allow_methods=["GET"],
@@ -255,6 +257,22 @@ def get_forecast():
                 status_code=503,
                 detail='Weather forecast temporarily unavailable. Check Render logs for upstream details.'
             ) from exc
+
+
+@app.get('/api/forecast/tomorrow')
+def forecast_preview():
+    """Return tomorrow's weather outlook for the page header.
+
+    This uses the same server-side cache as /api/predict/tomorrow, so opening
+    the website and then calculating a prediction does not require two
+    Open-Meteo requests.
+    """
+    date, _df, outlook = get_forecast()
+    return {
+        'date': date.isoformat(),
+        'outlook': outlook,
+        'status': 'success'
+    }
 
 def physics_estimate(df, capacity, inverter):
     gti = df['global_tilted_irradiance'].clip(lower=0).to_numpy(dtype=float)

@@ -1,6 +1,6 @@
 // Set to your deployed FastAPI URL when the frontend is hosted separately.
 // For local testing with FastAPI serving the frontend, leave this empty.
-const API_BASE = 'https://solar-predictions.onrender.com';
+const API_BASE = window.SOLAR_API_BASE || '';
 let yieldChartInstance = null;
 const byId = id => document.getElementById(id);
 const fmt = (n, digits = 2) => Number(n).toFixed(digits);
@@ -21,6 +21,29 @@ function updateOutlook(data) {
     byId('weather_icon').textContent = icon;
     byId('temp_display').textContent = `${fmt(data.max_temperature_c, 1)} °C`;
     byId('precip_display').textContent = `${fmt(data.precipitation_mm, 1)} mm`;
+}
+
+async function loadWeatherOnPageOpen() {
+    const description = byId('weather_description');
+    const icon = byId('weather_icon');
+    description.textContent = 'Loading tomorrow\'s forecast...';
+    icon.textContent = '⏳';
+
+    try {
+        const response = await fetch(`${API_BASE}/api/forecast/tomorrow`);
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(payload.detail || `Weather API error ${response.status}`);
+        }
+
+        updateOutlook(payload.outlook);
+        const dateEl = byId('weather_forecast_date');
+        if (dateEl && payload.date) dateEl.textContent = payload.date;
+    } catch (error) {
+        description.textContent = 'Forecast temporarily unavailable';
+        icon.textContent = '⚠️';
+        console.error('Unable to load weather preview:', error);
+    }
 }
 
 function renderHourlyChart(hourly) {
@@ -84,7 +107,7 @@ async function runPrediction(event) {
     try {
         const params = new URLSearchParams({capacity_kwp: capacity, inverter_kw: inverter});
         const response = await fetch(`${API_BASE}/api/predict/tomorrow?${params}`);
-        const payload = await response.json();
+        const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.detail || `API error ${response.status}`);
         byId('finalKwh').textContent = fmt(payload.total_daily_kwh, 2);
         byId('forecastDate').textContent = payload.date;
@@ -111,6 +134,7 @@ async function runPrediction(event) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    loadWeatherOnPageOpen();
     byId('predictionForm').addEventListener('submit', runPrediction);
     const updateClock = () => { byId('current_time_display').textContent = new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', second: '2-digit'}).format(new Date()); };
     updateClock(); setInterval(updateClock, 1000);
