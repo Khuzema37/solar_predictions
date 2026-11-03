@@ -27,22 +27,119 @@ function updateOutlook(data) {
     byId('precip_display').textContent = `${fmt(data.precipitation_mm, 1)} mm`;
 }
 
+const WEATHER_CACHE_KEY = 'solar_open_meteo_forecast_v1';
+const WEATHER_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const WEATHER_VARIABLES = [
+    'temperature_2m', 'relative_humidity_2m', 'cloud_cover',
+    'shortwave_radiation', 'direct_normal_irradiance', 'diffuse_radiation',
+    'global_tilted_irradiance', 'wind_speed_10m', 'precipitation'
+];
+let forecastBundle = null;
+let forecastLoadPromise = null;
+
+function dateInPakistan(date = new Date()) {
+    const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+}
+
+function tomorrowInPakistan() {
+    const [year, month, day] = dateInPakistan().split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + 1));
+    return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
+}
+
+function readCachedForecast(targetDate) {
+    try {
+        const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+        if (!raw) return null;
+        const cached = JSON.parse(raw);
+        const age = Date.now() - Number(cached.savedAt);
+        if (cached.date !== targetDate || !Number.isFinite(age) || age < 0 || age >= WEATHER_CACHE_TTL_MS) {
+            return null;
+        }
+        if (!cached.hourly || !cached.daily || cached.hourly.time?.length !== 24) return null;
+        return cached;
+    } catch (error) {
+        console.warn('Could not read browser weather cache:', error);
+        return null;
+    }
+}
+
+async function fetchWeatherBundle() {
+    const targetDate = tomorrowInPakistan();
+    const cached = readCachedForecast(targetDate);
+    if (cached) {
+        console.info('Using browser-cached Open-Meteo forecast.');
+        return cached;
+    }
+
+    // Read installation coordinates and array orientation from the backend so
+    // the browser requests exactly the same site/tilt/azimuth as the model.
+    const systemResponse = await fetch(`${API_BASE}/api/system`);
+    const system = await systemResponse.json().catch(() => ({}));
+    if (!systemResponse.ok) throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
+
+    const params = new URLSearchParams({
+        latitude: system.latitude,
+        longitude: system.longitude,
+        hourly: WEATHER_VARIABLES.join(','),
+        daily: 'temperature_2m_max,precipitation_sum,weather_code',
+        timezone: system.timezone || 'Asia/Karachi',
+        tilt: system.tilt_degrees,
+        azimuth: system.azimuth_degrees,
+        start_date: targetDate,
+        end_date: targetDate
+    });
+    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || payload.error) {
+        throw new Error(payload.reason || `Open-Meteo error ${response.status}`);
+    }
+    if (!payload.hourly || payload.hourly.time?.length !== 24 || !payload.daily) {
+        throw new Error('Open-Meteo did not return a complete 24-hour forecast.');
+    }
+
+    const bundle = { date: targetDate, hourly: payload.hourly, daily: payload.daily, savedAt: Date.now() };
+    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(bundle)); }
+    catch (error) { console.warn('Browser cache could not be saved:', error); }
+    console.info('Fetched and cached a new Open-Meteo forecast for six hours.');
+    return bundle;
+}
+
+function outlookFromBundle(bundle) {
+    return {
+        max_temperature_c: Number(bundle.daily.temperature_2m_max[0]),
+        precipitation_mm: Number(bundle.daily.precipitation_sum[0]),
+        weather_code: Number(bundle.daily.weather_code[0])
+    };
+}
+
+async function ensureForecastBundle() {
+    const targetDate = tomorrowInPakistan();
+    if (forecastBundle && forecastBundle.date === targetDate && Date.now() - forecastBundle.savedAt < WEATHER_CACHE_TTL_MS) {
+        return forecastBundle;
+    }
+    if (!forecastLoadPromise) {
+        forecastLoadPromise = fetchWeatherBundle()
+            .then(bundle => { forecastBundle = bundle; return bundle; })
+            .finally(() => { forecastLoadPromise = null; });
+    }
+    return forecastLoadPromise;
+}
+
 async function loadWeatherOnPageOpen() {
     const description = byId('weather_description');
     const icon = byId('weather_icon');
     description.textContent = 'Loading tomorrow\'s forecast...';
     icon.textContent = '⏳';
-
     try {
-        const response = await fetch(`${API_BASE}/api/forecast/tomorrow`);
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-            throw new Error(payload.detail || `Weather API error ${response.status}`);
-        }
-
-        updateOutlook(payload.outlook);
+        forecastBundle = await ensureForecastBundle();
+        updateOutlook(outlookFromBundle(forecastBundle));
         const dateEl = byId('weather_forecast_date');
-        if (dateEl && payload.date) dateEl.textContent = payload.date;
+        if (dateEl) dateEl.textContent = forecastBundle.date;
     } catch (error) {
         description.textContent = 'Forecast temporarily unavailable';
         icon.textContent = '⚠️';
@@ -206,8 +303,18 @@ async function runPrediction(event) {
     submit.disabled = true;
 
     try {
-        const params = new URLSearchParams({ capacity_kwp: capacity, inverter_kw: inverter });
-        const response = await fetch(`${API_BASE}/api/predict/tomorrow?${params}`);
+        forecastBundle = await ensureForecastBundle();
+        const response = await fetch(`${API_BASE}/api/predict/tomorrow`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                capacity_kwp: capacity,
+                inverter_kw: inverter,
+                date: forecastBundle.date,
+                hourly: forecastBundle.hourly,
+                daily: forecastBundle.daily
+            })
+        });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.detail || `API error ${response.status}`);
 
