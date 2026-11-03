@@ -3,6 +3,10 @@
 const API_BASE = window.SOLAR_API_BASE || '';
 let yieldChartInstance = null;
 const byId = id => document.getElementById(id);
+const setText = (id, value) => {
+    const element = byId(id);
+    if (element) element.textContent = value;
+};
 const fmt = (n, digits = 2) => Number(n).toFixed(digits);
 
 function weatherDescription(code) {
@@ -54,15 +58,25 @@ function renderHourlyChart(hourly) {
         data: {
             labels: hourly.map(row => row.time.slice(11, 16)),
             datasets: [{
-                label: 'Estimated hourly energy (kWh)',
+                label: 'Estimated energy in each hour (kWh)',
                 data: hourly.map(row => row.predicted_energy_kwh),
-                borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.14)',
-                borderWidth: 3, fill: true, tension: .3, pointRadius: 2
+                borderColor: '#0d9488',
+                backgroundColor: 'rgba(13,148,136,.14)',
+                borderWidth: 3,
+                fill: true,
+                tension: .3,
+                pointRadius: 2
             }]
         },
-        options: {responsive: true, maintainAspectRatio: false,
-            plugins: {legend: {display: false}},
-            scales: {x: {grid: {display: false}}, y: {beginAtZero: true}}}
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { grid: { display: false }, title: { display: true, text: 'Local time (Pakistan)' } },
+                y: { beginAtZero: true, title: { display: true, text: 'Estimated energy (kWh per hour)' } }
+            }
+        }
     });
 }
 
@@ -72,22 +86,107 @@ function populateHourlyTable(hourly) {
     hourly.forEach((item, index) => {
         const tr = document.createElement('tr');
         tr.className = index % 2 ? 'bg-slate-50/50' : 'bg-white';
-        const cells = [item.time.slice(11, 16), `${fmt(item.irradiance_w_m2, 1)} W/m²`,
+        const cells = [
+            item.time.slice(11, 16),
+            `${fmt(item.irradiance_w_m2, 1)} W/m²`,
             `${fmt(item.predicted_energy_kwh, 3)} kWh`,
-            item.irradiance_w_m2 <= 0 ? 'No sunlight' : item.predicted_energy_kwh > 0 ? 'Generating' : 'Low output'];
-        cells.forEach(value => { const td = document.createElement('td'); td.className = 'py-2 px-3 text-slate-700'; td.textContent = value; tr.appendChild(td); });
+            item.irradiance_w_m2 <= 0 ? 'No sunlight' : item.predicted_energy_kwh > 0 ? 'Generating' : 'Low output'
+        ];
+        cells.forEach(value => {
+            const td = document.createElement('td');
+            td.className = 'py-2 px-3 text-slate-700';
+            td.textContent = value;
+            tr.appendChild(td);
+        });
         body.appendChild(tr);
     });
 }
 
-function populateAppliances(hourly) {
-    const list = byId('applianceList');
-    list.replaceChildren();
-    const peak = Math.max(...hourly.map(h => h.predicted_energy_kwh));
-    const p = document.createElement('li');
-    p.className = 'p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700';
-    p.textContent = `Estimated peak one-hour average output: ${fmt(peak, 2)} kW. Appliance operation depends on instantaneous generation, startup surges, inverter limits, batteries, and grid supply. This forecast cannot certify a load bundle as safe to run.`;
-    list.appendChild(p);
+// The API returns one predicted value for each one-hour interval.
+// Therefore, the numeric value is kWh for that interval and numerically
+// equals the average kW during that hour (interval duration = 1 hour).
+function populateSolarInsights(hourly, outlook) {
+    const valid = hourly
+        .filter(row => Number.isFinite(Number(row.predicted_energy_kwh)))
+        .map(row => ({
+            ...row,
+            energy: Math.max(0, Number(row.predicted_energy_kwh)),
+            irradiance: Number(row.irradiance_w_m2) || 0,
+            cloud: Number(row.cloud_cover_pct)
+        }));
+
+    if (!valid.length) {
+        throw new Error('The API returned no usable hourly prediction values.');
+    }
+
+    // Peak one-hour interval.
+    const peak = valid.reduce((best, row) => row.energy > best.energy ? row : best, valid[0]);
+    const peakHour = peak.energy > 0 ? peak.time.slice(11, 16) : 'No solar output';
+    setText('peakHourValue', peakHour);
+    setText('peakHourNote', peak.energy > 0
+        ? `${fmt(peak.energy, 2)} kWh during this hour (about ${fmt(peak.energy, 2)} kW average)`
+        : 'No meaningful generation is predicted.');
+
+    // Find the strongest rolling three-hour window by total energy.
+    let bestStart = 0;
+    let bestTotal = -1;
+    const windowSize = Math.min(3, valid.length);
+    for (let i = 0; i <= valid.length - windowSize; i++) {
+        const total = valid.slice(i, i + windowSize).reduce((sum, row) => sum + row.energy, 0);
+        if (total > bestTotal) {
+            bestTotal = total;
+            bestStart = i;
+        }
+    }
+    const windowRows = valid.slice(bestStart, bestStart + windowSize);
+    const windowStart = windowRows[0].time.slice(11, 16);
+    const lastTime = windowRows[windowRows.length - 1].time;
+    const lastHour = Number(lastTime.slice(11, 13));
+    const windowEnd = `${String((lastHour + 1) % 24).padStart(2, '0')}:00`;
+    setText('peakWindowValue', `${windowStart}–${windowEnd}`);
+    setText('peakWindowNote',
+        `${fmt(bestTotal, 2)} kWh across ${windowSize} hours (${fmt(bestTotal / windowSize, 2)} kW average)`);
+
+    // Weather impact is a transparent rule-of-thumb based on forecast daylight
+    // cloud cover and daily precipitation. It is not a physical PV simulation.
+    const daylight = valid.filter(row => row.irradiance >= 50 && Number.isFinite(row.cloud));
+    const averageCloud = daylight.length
+        ? daylight.reduce((sum, row) => sum + row.cloud, 0) / daylight.length
+        : null;
+    const rain = Number(outlook?.precipitation_mm);
+    const weatherCode = Number(outlook?.weather_code);
+    let impactTitle = 'Weather impact unavailable';
+    let impactNote = 'The forecast did not provide enough daylight cloud-cover data to estimate weather impact.';
+
+    if (averageCloud !== null) {
+        if (averageCloud < 25) {
+            impactTitle = 'Favourable solar conditions';
+            impactNote = 'Forecast daylight cloud cover is low, so clouds are less likely to reduce solar production substantially.';
+        } else if (averageCloud < 50) {
+            impactTitle = 'Some cloud impact possible';
+            impactNote = 'Partly cloudy conditions may cause some variation in solar production.';
+        } else if (averageCloud < 75) {
+            impactTitle = 'Clouds may reduce output';
+            impactNote = 'Higher forecast daylight cloud cover may reduce or fluctuate solar generation.';
+        } else {
+            impactTitle = 'Significant cloud impact possible';
+            impactNote = 'Very high forecast daylight cloud cover may substantially reduce solar generation.';
+        }
+    }
+
+    if (Number.isFinite(rain) && rain >= 1) {
+        impactNote += ` Rain is also forecast (${fmt(rain, 1)} mm).`;
+    } else if (Number.isFinite(rain) && rain > 0) {
+        impactNote += ` A small amount of rain is forecast (${fmt(rain, 1)} mm).`;
+    }
+    if (weatherCode >= 95) {
+        impactNote += ' Thunderstorms are indicated in the daily weather forecast.';
+    }
+
+    setText('weatherImpactValue', impactTitle);
+    setText('weatherImpactNote', impactNote);
+    setText('daylightCloudValue', averageCloud === null ? 'Unavailable' : `${fmt(averageCloud, 0)}%`);
+    setText('rainImpactValue', Number.isFinite(rain) ? `${fmt(rain, 1)} mm` : 'Unavailable');
 }
 
 async function runPrediction(event) {
@@ -98,32 +197,36 @@ async function runPrediction(event) {
         byId('errorMessage').textContent = 'Enter valid panel and inverter capacities between 0 and 1000.';
         return;
     }
+
     const submit = byId('predictButton');
     byId('errorMessage').textContent = '';
     byId('btnLoader').style.display = 'block';
     byId('btnIcon').classList.add('hidden');
     byId('apiStatusText').classList.remove('hidden');
     submit.disabled = true;
+
     try {
-        const params = new URLSearchParams({capacity_kwp: capacity, inverter_kw: inverter});
+        const params = new URLSearchParams({ capacity_kwp: capacity, inverter_kw: inverter });
         const response = await fetch(`${API_BASE}/api/predict/tomorrow?${params}`);
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.detail || `API error ${response.status}`);
+
+        if (!Array.isArray(payload.hourly) || payload.hourly.length === 0) {
+            throw new Error('The prediction API returned no hourly forecast data.');
+        }
+
         byId('finalKwh').textContent = fmt(payload.total_daily_kwh, 2);
         byId('forecastDate').textContent = payload.date;
-        byId('methodLabel').textContent = payload.method === 'xgboost_scaled_reference' ? 'XGBoost reference (scaled)' : 'Parameterized physics estimate';
-        byId('methodNote').textContent = payload.method_note;
-        byId('physicsTotal').textContent = `${fmt(payload.physics_total_kwh, 2)} kWh`;
-        byId('systemSummary').textContent = `${fmt(payload.system.capacity_kwp, 1)} kWp panels · ${fmt(payload.system.inverter_kw, 1)} kW inverter`;
         updateOutlook(payload.outlook);
         renderHourlyChart(payload.hourly);
         populateHourlyTable(payload.hourly);
-        populateAppliances(payload.hourly);
+        populateSolarInsights(payload.hourly, payload.outlook || {});
+
         byId('emptyState').classList.add('hidden');
         byId('populatedState').classList.remove('hidden');
         byId('populatedState').classList.add('flex');
     } catch (error) {
-        byId('errorMessage').textContent = error.message || 'Could not fetch the forecast.';
+        setText('errorMessage', error.message || 'Could not fetch the forecast.');
         console.error(error);
     } finally {
         byId('btnLoader').style.display = 'none';
@@ -136,6 +239,14 @@ async function runPrediction(event) {
 document.addEventListener('DOMContentLoaded', () => {
     loadWeatherOnPageOpen();
     byId('predictionForm').addEventListener('submit', runPrediction);
-    const updateClock = () => { byId('current_time_display').textContent = new Intl.DateTimeFormat('en-US', {timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit', second: '2-digit'}).format(new Date()); };
-    updateClock(); setInterval(updateClock, 1000);
+    const updateClock = () => {
+        byId('current_time_display').textContent = new Intl.DateTimeFormat('en-US', {
+            timeZone: 'Asia/Karachi',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        }).format(new Date());
+    };
+    updateClock();
+    setInterval(updateClock, 1000);
 });

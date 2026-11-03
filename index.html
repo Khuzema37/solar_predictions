@@ -213,16 +213,51 @@
                             </div>
                         </div>
 
-                        <!-- Appliances Covered -->
-                        <div class="mb-3">
-                            <h4 class="text-sm font-bold text-slate-700 uppercase tracking-wider">Appliance Planning
-                                Note</h4>
-                            <p class="text-xs text-slate-500">Hourly average output does not guarantee instantaneous
-                                appliance capacity.</p>
-                        </div>
-                        <ul id="applianceList" class="space-y-3 grid grid-cols-1 gap-3">
-                            <!-- Dynamically populated by app.js -->
-                        </ul>
+                        <!-- Stage 1: Solar Usage Insights -->
+                        <section class="space-y-4" aria-labelledby="solarInsightsHeading">
+                            <div>
+                                <h4 id="solarInsightsHeading" class="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                                    <i class="fa-solid fa-lightbulb text-amber-500 mr-2"></i>Solar Usage Insights
+                                </h4>
+                                <p class="text-xs text-slate-500 mt-1">Practical guidance calculated from tomorrow's hourly forecast.</p>
+                            </div>
+
+                            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                <article class="insight-card">
+                                    <div class="insight-icon bg-amber-50 text-amber-600"><i class="fa-solid fa-sun"></i></div>
+                                    <p class="insight-label">Peak production hour</p>
+                                    <p id="peakHourValue" class="insight-value">--</p>
+                                    <p id="peakHourNote" class="insight-description">Waiting for forecast data</p>
+                                </article>
+
+                                <article class="insight-card">
+                                    <div class="insight-icon bg-teal-50 text-teal-700"><i class="fa-solid fa-clock"></i></div>
+                                    <p class="insight-label">Strongest 3-hour window</p>
+                                    <p id="peakWindowValue" class="insight-value">--</p>
+                                    <p id="peakWindowNote" class="insight-description">Waiting for forecast data</p>
+                                </article>
+
+                                <article class="insight-card sm:col-span-2">
+                                    <div class="flex items-start gap-3">
+                                        <div class="insight-icon bg-sky-50 text-sky-700"><i class="fa-solid fa-cloud-sun"></i></div>
+                                        <div class="min-w-0 flex-1">
+                                            <p class="insight-label">Weather impact on solar generation</p>
+                                            <p id="weatherImpactValue" class="insight-value">--</p>
+                                            <p id="weatherImpactNote" class="insight-description">Waiting for forecast data</p>
+                                        </div>
+                                    </div>
+                                    <div class="weather-facts">
+                                        <span><i class="fa-solid fa-cloud"></i> Daylight cloud cover: <strong id="daylightCloudValue">--</strong></span>
+                                        <span><i class="fa-solid fa-cloud-rain"></i> Forecast rain: <strong id="rainImpactValue">--</strong></span>
+                                    </div>
+                                </article>
+                            </div>
+
+                            <p class="text-xs text-slate-500 leading-relaxed bg-slate-50 border border-slate-200 rounded-lg p-3">
+                                <i class="fa-solid fa-circle-info text-sky-600 mr-1"></i>
+                                These are estimates based on hourly forecast data. Actual generation can differ because of changing weather, shading, dust, system condition, and inverter limits.
+                            </p>
+                        </section>
                     </div>
                 </div>
             </div>
@@ -244,7 +279,7 @@
         // Change to http://127.0.0.1:8000 while testing against your local backend.
         window.SOLAR_API_BASE = window.SOLAR_API_BASE || 'https://solar-predictions.onrender.com';
     </script>
-    <script src="app.js"></script>
+    <script src="app.js?v=stage1-fix-20261103"></script>
 </body>
 
 </html>
