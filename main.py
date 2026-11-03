@@ -1,4 +1,3 @@
-"""Solar forecast API. Run: uvicorn main:app --reload"""
 import json
 import os
 from pathlib import Path
