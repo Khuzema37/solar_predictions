@@ -146,3 +146,50 @@ body {
     color: #334155;
     background: #fff;
 }
+
+
+/* Stage 2.1: hourly planner and responsive appliance list */
+.planner-chart-wrap { position: relative; width: 100%; height: 260px; }
+.appliance-category-input {
+    min-width: 7.5rem; max-width: 9rem; border: 1px solid #cbd5e1;
+    border-radius: .4rem; padding: .35rem .4rem; color: #334155; background: #fff;
+}
+.planner-recommendation {
+    border: 1px solid #99f6e4; background: #f0fdfa; border-radius: .65rem;
+    padding: .75rem; margin-top: .55rem; font-size: .82rem; line-height: 1.4rem;
+}
+.planner-recommendation p { margin-top: .2rem; }
+.planner-recommendation.planner-warning { border-color: #fcd34d; background: #fffbeb; }
+.planner-recommendation.planner-neutral { border-color: #cbd5e1; background: #f8fafc; }
+.planner-good { color: #0f766e; font-weight: 600; }
+.planner-reason { color: #64748b; font-size: .75rem; }
+.planner-category {
+    display: inline-block; margin-left: .35rem; padding: .05rem .4rem;
+    border-radius: 999px; background: #e2e8f0; color: #475569; font-size: .68rem;
+}
+@media (max-width: 640px) {
+    .planner-table-wrap { overflow: visible; }
+    .planner-table { min-width: 0 !important; border-collapse: separate; border-spacing: 0 .65rem; }
+    .planner-table thead { display: none; }
+    .planner-table tbody { display: block; }
+    .planner-table .appliance-row {
+        display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .45rem .65rem; padding: .7rem; margin-bottom: .65rem;
+        border: 1px solid #e2e8f0; border-radius: .7rem; background: #fff;
+    }
+    .planner-table .appliance-row td { display: block; padding: 0 !important; text-align: left !important; min-width: 0; }
+    .planner-table .appliance-row td:first-child { grid-column: 1 / -1; }
+    .planner-table .appliance-row td:nth-child(2)::before { content: "Watts"; }
+    .planner-table .appliance-row td:nth-child(3)::before { content: "Quantity"; }
+    .planner-table .appliance-row td:nth-child(4)::before { content: "Hours/day"; }
+    .planner-table .appliance-row td:nth-child(5)::before { content: "Category"; }
+    .planner-table .appliance-row td:nth-child(6)::before { content: "Energy/day"; }
+    .planner-table .appliance-row td:nth-child(7) { grid-column: 2; text-align: right !important; }
+    .planner-table .appliance-row td:not(:first-child)::before {
+        display: block; margin-bottom: .2rem; color: #64748b; font-size: .65rem; font-weight: 700;
+    }
+    .planner-table .appliance-input { width: 100%; max-width: 8rem; }
+    .planner-table .appliance-name-input { width: 100%; }
+    .planner-table .appliance-category-input { width: 100%; max-width: none; }
+    .planner-chart-wrap { height: 230px; }
+}

@@ -287,41 +287,45 @@ function populateSolarInsights(hourly, outlook) {
 }
 
 
-// Stage 2: Appliance planner. Values are user-editable; preset wattages are illustrative.
+// Stage 2.1: hourly, inverter-aware appliance planning.
+// The API's predicted_energy_kwh is energy over one hour; numerically it is
+// also the average AC kW for that one-hour interval.
 const APPLIANCE_PRESETS = {
-    fan: { name: 'Ceiling fan', watts: 75, quantity: 1, hours: 8, flexible: true },
-    led: { name: 'LED bulb', watts: 12, quantity: 1, hours: 5, flexible: true },
-    tv: { name: 'LED television', watts: 100, quantity: 1, hours: 4, flexible: true },
-    refrigerator: { name: 'Refrigerator', watts: 150, quantity: 1, hours: 8, flexible: false },
-    ac: { name: 'Inverter AC', watts: 1200, quantity: 1, hours: 6, flexible: true },
-    washing: { name: 'Washing machine', watts: 500, quantity: 1, hours: 1, flexible: true },
-    pump: { name: 'Water pump', watts: 750, quantity: 1, hours: 1, flexible: true },
-    custom: { name: 'Custom appliance', watts: 100, quantity: 1, hours: 1, flexible: true }
+    fan: { name: 'Ceiling fan', watts: 75, quantity: 1, hours: 8, category: 'essential' },
+    led: { name: 'LED bulb', watts: 12, quantity: 1, hours: 5, category: 'essential' },
+    tv: { name: 'LED television', watts: 100, quantity: 1, hours: 4, category: 'schedulable' },
+    refrigerator: { name: 'Refrigerator', watts: 150, quantity: 1, hours: 8, category: 'automatic' },
+    ac: { name: 'Inverter AC', watts: 1200, quantity: 1, hours: 6, category: 'automatic' },
+    washing: { name: 'Washing machine', watts: 500, quantity: 1, hours: 1, category: 'schedulable' },
+    pump: { name: 'Water pump', watts: 750, quantity: 1, hours: 1, category: 'schedulable' },
+    custom: { name: 'Custom appliance', watts: 100, quantity: 1, hours: 1, category: 'schedulable' }
 };
 let latestPrediction = null;
 let applianceRowCounter = 0;
+let plannerChartInstance = null;
 
-function applianceRowEnergy(row) {
+function applianceRowValues(row) {
     const watts = Number(row.querySelector('[data-field="watts"]').value);
     const quantity = Number(row.querySelector('[data-field="quantity"]').value);
     const hours = Number(row.querySelector('[data-field="hours"]').value);
-    if (![watts, quantity, hours].every(Number.isFinite) || watts <= 0 || quantity <= 0 || hours < 0 || hours > 24) return null;
-    return watts * quantity * hours / 1000;
+    if (![watts, quantity, hours].every(Number.isFinite) || watts <= 0 || quantity <= 0 ||
+        watts > 100000 || quantity > 100 || hours < 0 || hours > 24 || !Number.isInteger(hours)) return null;
+    return {
+        name: row.querySelector('[data-field="name"]').value.trim() || 'Unnamed appliance',
+        watts, quantity, hours,
+        category: row.querySelector('[data-field="category"]').value,
+        energy: watts * quantity * hours / 1000,
+        demandKw: watts * quantity / 1000
+    };
 }
 
 function updateApplianceTotal() {
-    let total = 0;
-    let valid = true;
+    let total = 0, valid = true;
     document.querySelectorAll('.appliance-row').forEach(row => {
-        const energy = applianceRowEnergy(row);
+        const item = applianceRowValues(row);
         const output = row.querySelector('[data-field="energy"]');
-        if (energy === null) {
-            valid = false;
-            output.textContent = 'Check inputs';
-        } else {
-            total += energy;
-            output.textContent = `${energy.toFixed(2)} kWh`;
-        }
+        if (!item) { valid = false; output.textContent = 'Check inputs'; }
+        else { total += item.energy; output.textContent = `${item.energy.toFixed(2)} kWh`; }
     });
     setText('applianceTotal', valid ? `${total.toFixed(2)} kWh/day` : 'Check appliance inputs');
     return valid ? total : null;
@@ -330,9 +334,7 @@ function updateApplianceTotal() {
 function addApplianceRow(presetKey) {
     const preset = APPLIANCE_PRESETS[presetKey] || APPLIANCE_PRESETS.custom;
     const body = byId('applianceRows');
-    const empty = byId('applianceEmptyRow');
-    if (empty) empty.remove();
-
+    byId('applianceEmptyRow')?.remove();
     const row = document.createElement('tr');
     row.className = 'appliance-row';
     row.dataset.rowId = String(++applianceRowCounter);
@@ -341,110 +343,149 @@ function addApplianceRow(presetKey) {
     nameCell.className = 'px-2 py-2';
     const name = document.createElement('input');
     name.className = 'appliance-name-input text-xs';
-    name.value = preset.name;
-    name.maxLength = 50;
+    name.value = preset.name; name.maxLength = 50; name.dataset.field = 'name';
     name.setAttribute('aria-label', 'Appliance name');
-    name.dataset.field = 'name';
-    nameCell.appendChild(name);
+    nameCell.appendChild(name); row.appendChild(nameCell);
 
     const addNumberCell = (field, value, min, max, step) => {
-        const td = document.createElement('td');
-        td.className = 'px-2 py-2';
+        const td = document.createElement('td'); td.className = 'px-2 py-2';
         const input = document.createElement('input');
-        input.type = 'number';
-        input.className = 'appliance-input text-xs';
-        input.dataset.field = field;
-        input.value = value;
-        input.min = min;
-        input.max = max;
-        input.step = step;
-        input.setAttribute('aria-label', field);
-        td.appendChild(input);
-        return td;
+        input.type = 'number'; input.className = 'appliance-input text-xs';
+        input.dataset.field = field; input.value = value;
+        input.min = min; input.max = max; input.step = step;
+        input.setAttribute('aria-label', field); td.appendChild(input); return td;
     };
-
-    row.appendChild(nameCell);
     row.appendChild(addNumberCell('watts', preset.watts, '1', '100000', '1'));
     row.appendChild(addNumberCell('quantity', preset.quantity, '1', '100', '1'));
-    row.appendChild(addNumberCell('hours', preset.hours, '0', '24', '0.5'));
+    row.appendChild(addNumberCell('hours', preset.hours, '0', '24', '1'));
 
-    const flexibleCell = document.createElement('td');
-    flexibleCell.className = 'px-2 py-2 text-center';
-    const flexible = document.createElement('input');
-    flexible.type = 'checkbox';
-    flexible.checked = preset.flexible;
-    flexible.dataset.field = 'flexible';
-    flexible.setAttribute('aria-label', 'Can shift to daytime');
-    flexibleCell.appendChild(flexible);
-    row.appendChild(flexibleCell);
+    const categoryCell = document.createElement('td'); categoryCell.className = 'px-2 py-2';
+    const category = document.createElement('select');
+    category.className = 'appliance-category-input text-xs'; category.dataset.field = 'category';
+    category.setAttribute('aria-label', 'Appliance category');
+    [['schedulable','Schedulable'],['essential','Essential'],['automatic','Automatic']].forEach(([value,label]) => {
+        const option = document.createElement('option'); option.value = value; option.textContent = label;
+        category.appendChild(option);
+    });
+    category.value = preset.category; categoryCell.appendChild(category); row.appendChild(categoryCell);
 
     const energyCell = document.createElement('td');
     energyCell.className = 'px-2 py-2 text-right whitespace-nowrap font-semibold text-slate-700';
-    energyCell.dataset.field = 'energy';
-    energyCell.textContent = '0.00 kWh';
-    row.appendChild(energyCell);
+    energyCell.dataset.field = 'energy'; energyCell.textContent = '0.00 kWh'; row.appendChild(energyCell);
 
-    const removeCell = document.createElement('td');
-    removeCell.className = 'px-2 py-2 text-right';
-    const remove = document.createElement('button');
-    remove.type = 'button';
+    const removeCell = document.createElement('td'); removeCell.className = 'px-2 py-2 text-right';
+    const remove = document.createElement('button'); remove.type = 'button';
     remove.className = 'text-red-600 hover:text-red-800 px-2 py-1';
     remove.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
     remove.setAttribute('aria-label', 'Remove appliance');
     remove.addEventListener('click', () => {
         row.remove();
         if (!document.querySelector('.appliance-row')) {
-            const emptyRow = document.createElement('tr');
-            emptyRow.id = 'applianceEmptyRow';
-            emptyRow.innerHTML = '<td colspan="7" class="px-2 py-5 text-center text-slate-500">Add appliances to estimate your daily consumption.</td>';
-            body.appendChild(emptyRow);
+            const empty = document.createElement('tr'); empty.id = 'applianceEmptyRow';
+            empty.innerHTML = '<td colspan="7" class="px-2 py-5 text-center text-slate-500">Add appliances to estimate your daily consumption.</td>';
+            body.appendChild(empty);
         }
-        updateApplianceTotal();
-        byId('applianceResults').classList.add('hidden');
+        updateApplianceTotal(); byId('applianceResults').classList.add('hidden');
     });
-    removeCell.appendChild(remove);
-    row.appendChild(removeCell);
-
-    row.addEventListener('input', () => {
-        updateApplianceTotal();
-        byId('applianceResults').classList.add('hidden');
-    });
-    row.addEventListener('change', () => {
-        updateApplianceTotal();
-        byId('applianceResults').classList.add('hidden');
-    });
-    body.appendChild(row);
-    updateApplianceTotal();
+    removeCell.appendChild(remove); row.appendChild(removeCell);
+    row.addEventListener('input', () => { updateApplianceTotal(); byId('applianceResults').classList.add('hidden'); });
+    row.addEventListener('change', () => { updateApplianceTotal(); byId('applianceResults').classList.add('hidden'); });
+    body.appendChild(row); updateApplianceTotal();
 }
 
-function bestSolarWindow(hourly, durationHours) {
-    const count = Math.max(1, Math.min(24, Math.ceil(durationHours)));
+// Find a contiguous block where each hour's remaining solar headroom can
+// support this appliance's rated running demand. Rank feasible blocks by
+// solar headroom (not merely by total solar energy).
+function findOperatingWindow(solarKw, alreadyScheduledKw, demandKw, durationHours) {
+    const slots = Math.max(1, Math.ceil(durationHours));
     let best = null;
-    for (let start = 0; start <= hourly.length - count; start++) {
-        const slice = hourly.slice(start, start + count);
-        const energy = slice.reduce((sum, item) => sum + Math.max(0, Number(item.predicted_energy_kwh) || 0), 0);
-        if (!best || energy > best.energy) best = { start, end: start + count, energy };
+    for (let start = 0; start <= solarKw.length - slots; start++) {
+        let feasibleHours = 0, minimumHeadroom = Infinity, totalHeadroom = 0;
+        for (let offset = 0; offset < slots; offset++) {
+            const idx = start + offset;
+            const headroom = Math.max(0, solarKw[idx] - alreadyScheduledKw[idx]);
+            if (headroom + 1e-9 >= demandKw) feasibleHours++;
+            minimumHeadroom = Math.min(minimumHeadroom, headroom);
+            totalHeadroom += Math.min(headroom, demandKw);
+        }
+        const candidate = { start, end: start + slots, feasibleHours, minimumHeadroom, totalHeadroom };
+        if (!best || candidate.feasibleHours > best.feasibleHours ||
+            (candidate.feasibleHours === best.feasibleHours && candidate.totalHeadroom > best.totalHeadroom)) best = candidate;
     }
     return best;
 }
 
+function drawPlannerChart(solarKw, scheduledKw) {
+    const canvas = byId('plannerHourlyChart');
+    if (!canvas || typeof Chart === 'undefined') return;
+    if (plannerChartInstance) plannerChartInstance.destroy();
+    const labels = latestPrediction.hourly.map(item => item.time.slice(11, 16));
+    plannerChartInstance = new Chart(canvas.getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets: [
+            { label: 'Forecast solar AC output (kW)', data: solarKw, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.12)', fill: true, tension: .25, pointRadius: 1.5 },
+            { label: 'Scheduled appliance demand (kW)', data: scheduledKw, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.08)', fill: false, tension: 0, pointRadius: 1.5 }
+        ]},
+        options: { responsive: true, maintainAspectRatio: false,
+            interaction: { mode: 'index', intersect: false },
+            plugins: { legend: { position: 'bottom' } },
+            scales: { x: { title: { display: true, text: 'Pakistan local time' }, grid: { display: false } },
+                y: { beginAtZero: true, title: { display: true, text: 'Average power (kW)' } } }
+        }
+    });
+}
+
 function calculateAppliancePlan() {
     const total = updateApplianceTotal();
-    const error = byId('applianceError');
-    error.textContent = '';
-    if (total === null) {
-        error.textContent = 'Correct all appliance values. Wattage and quantity must be positive; hours must be between 0 and 24.';
-        return;
-    }
-    if (!document.querySelector('.appliance-row')) {
-        error.textContent = 'Add at least one appliance before calculating.';
-        return;
-    }
-    if (!latestPrediction || !Array.isArray(latestPrediction.hourly)) {
-        error.textContent = 'First calculate tomorrow’s solar generation using the Predict button.';
-        return;
+    const error = byId('applianceError'); error.textContent = '';
+    const rows = [...document.querySelectorAll('.appliance-row')];
+    if (total === null) { error.textContent = 'Correct all appliance values. Wattage and quantity must be positive; hours must be whole numbers between 0 and 24.'; return; }
+    if (!rows.length) { error.textContent = 'Add at least one appliance before calculating.'; return; }
+    if (!latestPrediction || !Array.isArray(latestPrediction.hourly) || latestPrediction.hourly.length !== 24) {
+        error.textContent = 'First calculate tomorrow’s solar generation using the Predict button.'; return;
     }
 
+    const inverterKw = Number(byId('inverterKw').value);
+    if (!Number.isFinite(inverterKw) || inverterKw <= 0) { error.textContent = 'Enter a valid inverter capacity first.'; return; }
+    const items = rows.map(applianceRowValues);
+    if (items.some(item => !item)) { error.textContent = 'One or more appliance inputs are invalid.'; return; }
+
+    const solarKw = latestPrediction.hourly.map(item =>
+        Math.min(inverterKw, Math.max(0, Number(item.predicted_energy_kwh) || 0)));
+    const scheduledKw = Array(24).fill(0);
+    const recommendations = [];
+    const schedulable = items.filter(item => item.category === 'schedulable' && item.hours > 0);
+    const nonSchedulable = items.filter(item => item.category !== 'schedulable');
+
+    // Schedule largest loads first so small loads do not occupy the best slots.
+    schedulable.sort((a, b) => b.demandKw - a.demandKw);
+    let scheduledEnergy = 0, coveredEnergy = 0;
+    schedulable.forEach(item => {
+        const window = findOperatingWindow(solarKw, scheduledKw, item.demandKw, item.hours);
+        const end = Math.min(24, window.end);
+        const startTime = latestPrediction.hourly[window.start].time.slice(11, 16);
+        const endTime = end >= 24 ? '24:00' : latestPrediction.hourly[end].time.slice(11, 16);
+        const feasible = window.feasibleHours === (window.end - window.start);
+        const hoursPlaced = Math.min(item.hours, window.end - window.start);
+        const actualScheduledKw = feasible ? item.demandKw : 0;
+        if (feasible) {
+            for (let h = window.start; h < window.end; h++) scheduledKw[h] += item.demandKw;
+            scheduledEnergy += item.energy;
+            coveredEnergy += item.energy;
+            recommendations.push(`<article class="planner-recommendation"><strong>${escapeHtml(item.name)}</strong><p>Suggested window: <strong>${startTime}–${endTime}</strong> (${item.hours.toFixed(1)} planned operating hours).</p><p class="planner-good">Estimated solar headroom supports the rated load in every selected hour, before unlisted household loads.</p><p class="planner-reason">Reason: minimum available solar headroom in this window is ${window.minimumHeadroom.toFixed(2)} kW; appliance demand is ${item.demandKw.toFixed(2)} kW.</p></article>`);
+        } else {
+            const percent = Math.round(window.feasibleHours / Math.max(1, window.end - window.start) * 100);
+            recommendations.push(`<article class="planner-recommendation planner-warning"><strong>${escapeHtml(item.name)}</strong><p>Best available window: <strong>${startTime}–${endTime}</strong>, but the forecast does not support the full rated load in every hour.</p><p>Only ${window.feasibleHours} of ${window.end - window.start} hours meet the ${item.demandKw.toFixed(2)} kW demand (${percent}%). Consider a shorter run, a lower-power appliance, or grid support.</p><p class="planner-reason">Reason: the selected window has the best combined solar headroom, but full solar coverage cannot be confirmed.</p></article>`);
+        }
+    });
+
+    nonSchedulable.forEach(item => {
+        const categoryText = item.category === 'automatic' ? 'Automatic / cycling load' : 'Essential load';
+        recommendations.push(`<article class="planner-recommendation planner-neutral"><strong>${escapeHtml(item.name)}</strong> <span class="planner-category">${categoryText}</span><p>Do not automatically shift this appliance. Its entered energy estimate is ${item.energy.toFixed(2)} kWh/day (${item.demandKw.toFixed(2)} kW while running).</p><p class="planner-reason">${item.category === 'automatic' ? 'Actual demand varies with thermostat and duty cycle; entered hours should represent estimated compressor or operating hours.' : 'Keep essential usage based on household needs. This planner does not advise delaying essential loads.'}</p></article>`);
+    });
+
+    // The total energy balance is retained as a daily comparison, not a claim
+    // that all daily consumption is directly solar-powered.
     const generation = Number(latestPrediction.total_daily_kwh);
     const balance = generation - total;
     setText('plannerGeneration', `${generation.toFixed(2)} kWh`);
@@ -452,31 +493,23 @@ function calculateAppliancePlan() {
     setText('plannerBalance', `${balance >= 0 ? '+' : ''}${balance.toFixed(2)} kWh`);
     byId('plannerBalance').style.color = balance >= 0 ? '#0f766e' : '#b91c1c';
 
-    const recommendations = [];
-    document.querySelectorAll('.appliance-row').forEach(row => {
-        const name = row.querySelector('[data-field="name"]').value.trim() || 'Unnamed appliance';
-        const watts = Number(row.querySelector('[data-field="watts"]').value);
-        const quantity = Number(row.querySelector('[data-field="quantity"]').value);
-        const hours = Number(row.querySelector('[data-field="hours"]').value);
-        const flexible = row.querySelector('[data-field="flexible"]').checked;
-        if (flexible && hours > 0) {
-            const window = bestSolarWindow(latestPrediction.hourly, hours);
-            const startTime = latestPrediction.hourly[window.start].time.slice(11, 16);
-            const endTime = window.end >= 24 ? '24:00' : latestPrediction.hourly[window.end].time.slice(11, 16);
-            recommendations.push(`<div class="rounded-lg bg-teal-50 border border-teal-100 p-3"><strong class="text-slate-800">${escapeHtml(name)}</strong>: try scheduling around <strong class="text-teal-800">${startTime}–${endTime}</strong> (${Math.ceil(hours)}-hour high-generation window).</div>`);
-        } else if (hours > 0) {
-            recommendations.push(`<div class="rounded-lg bg-slate-50 border border-slate-200 p-3"><strong class="text-slate-800">${escapeHtml(name)}</strong>: marked as non-flexible; run when needed. Its estimated consumption is ${(watts * quantity * hours / 1000).toFixed(2)} kWh/day.</div>`);
-        }
-    });
-    if (!recommendations.length) recommendations.push('<p>No flexible appliances with operating hours were selected.</p>');
+    const availableSolarEnergy = solarKw.reduce((sum, value) => sum + value, 0);
+    const scheduledLoadEnergy = scheduledKw.reduce((sum, value) => sum + value, 0);
+    const coverage = scheduledLoadEnergy > 0 ? Math.min(100, availableSolarEnergy / scheduledLoadEnergy * 100) : 0;
+    setText('plannerCoverage', scheduledLoadEnergy > 0 ? `${coverage.toFixed(0)}% of scheduled energy is within forecast solar energy` : 'No schedulable loads');
+    setText('plannerPeakLoad', `${Math.max(...scheduledKw).toFixed(2)} kW`);
+    drawPlannerChart(solarKw, scheduledKw);
 
-    let balanceNote = '';
-    if (balance >= 0) {
-        balanceNote = `<p class="text-sm font-semibold text-teal-800 mb-2">Daily energy estimate: predicted generation is ${balance.toFixed(2)} kWh higher than the listed appliance use.</p>`;
-    } else {
-        balanceNote = `<p class="text-sm font-semibold text-red-700 mb-2">Daily energy estimate: listed appliance use exceeds predicted generation by ${Math.abs(balance).toFixed(2)} kWh.</p>`;
-    }
-    byId('applianceRecommendations').innerHTML = balanceNote + recommendations.join('');
+    const systemType = byId('plannerSystemType').value;
+    const systemNote = systemType === 'on_grid'
+        ? 'On-grid selected: the utility grid may supply shortfalls when available, but grid import/export and outage behaviour are not calculated.'
+        : 'Battery system selected: battery charging/discharging is not modelled in this stage, so recommendations still represent direct solar only.';
+    const balanceNote = balance >= 0
+        ? `Daily generation is ${balance.toFixed(2)} kWh higher than the entered appliance consumption. This daily surplus does not prove hourly coverage.`
+        : `Entered appliance consumption exceeds predicted daily generation by ${Math.abs(balance).toFixed(2)} kWh.`;
+    byId('applianceRecommendations').innerHTML =
+        `<p class="text-sm font-semibold text-slate-800 mb-2">${escapeHtml(balanceNote)}</p><p class="text-xs text-slate-500 mb-3">${escapeHtml(systemNote)} Solar headroom is calculated after the inverter AC limit and after other schedulable appliances already placed by this planner.</p>` +
+        (recommendations.length ? recommendations.join('') : '<p>No appliance recommendations are needed for the current inputs.</p>');
     byId('applianceResults').classList.remove('hidden');
 }
 
@@ -485,7 +518,6 @@ function escapeHtml(value) {
         '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     })[char]);
 }
-
 
 async function runPrediction(event) {
     event.preventDefault();

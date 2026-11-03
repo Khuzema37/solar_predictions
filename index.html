@@ -269,6 +269,17 @@
                             </div>
 
                             <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3">
+                                    <div>
+                                        <label for="plannerSystemType" class="block text-xs font-semibold text-slate-700 mb-1">Solar system type</label>
+                                        <select id="plannerSystemType" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+                                            <option value="on_grid" selected>On-grid (no battery)</option>
+                                            <option value="hybrid">Hybrid (battery support not modelled)</option>
+                                            <option value="off_grid">Off-grid (battery support not modelled)</option>
+                                        </select>
+                                    </div>
+                                    <p class="self-end text-xs text-slate-500">Stage 2.1 calculates direct solar availability only. Battery behaviour and grid import/export are not simulated.</p>
+                                </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
                                     <label class="sr-only" for="appliancePreset">Choose an appliance to add</label>
                                     <select id="appliancePreset" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm">
@@ -287,15 +298,15 @@
                                     </button>
                                 </div>
                                 <p class="text-xs text-slate-500">Preset wattages are examples. Check the appliance label and replace the wattage with its actual rating. For a refrigerator, enter estimated compressor running hours, not all 24 clock hours.</p>
-                                <div class="overflow-x-auto">
-                                    <table class="w-full min-w-[650px] text-left text-xs">
+                                <div class="planner-table-wrap overflow-x-auto">
+                                    <table class="w-full min-w-[650px] text-left text-xs planner-table">
                                         <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
                                             <tr>
                                                 <th class="px-2 py-2">Appliance</th>
                                                 <th class="px-2 py-2">Watts</th>
                                                 <th class="px-2 py-2">Qty</th>
                                                 <th class="px-2 py-2">Hours/day</th>
-                                                <th class="px-2 py-2">Flexible?</th>
+                                                <th class="px-2 py-2">Category</th>
                                                 <th class="px-2 py-2 text-right">kWh/day</th>
                                                 <th class="px-2 py-2"></th>
                                             </tr>
@@ -329,15 +340,24 @@
                                         <p id="plannerBalance" class="planner-value">--</p>
                                     </article>
                                 </div>
-                                <div class="rounded-xl border border-slate-200 bg-white p-4">
-                                    <h5 class="text-sm font-bold text-slate-700 mb-2">Suggested daytime operating windows</h5>
+                                <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                                    <div>
+                                        <h5 class="text-sm font-bold text-slate-700 mb-1">Hourly solar availability vs planned load</h5>
+                                        <p class="text-xs text-slate-500">Solar is the predicted AC output after the inverter limit. Planned load shows the schedulable appliance demand placed by this planner.</p>
+                                    </div>
+                                    <div class="planner-chart-wrap"><canvas id="plannerHourlyChart" aria-label="Hourly solar output and planned appliance load chart"></canvas></div>
+                                    <div class="flex flex-wrap gap-3 text-xs text-slate-500">
+                                        <span>Solar coverage: <strong id="plannerCoverage">--</strong></span>
+                                        <span>Peak scheduled load: <strong id="plannerPeakLoad">--</strong></span>
+                                    </div>
+                                    <h5 class="text-sm font-bold text-slate-700 pt-2 border-t border-slate-100">Suggested operating windows</h5>
                                     <div id="applianceRecommendations" class="space-y-2 text-sm text-slate-600">
                                         Add appliances and calculate your plan to see suggestions.
                                     </div>
                                 </div>
                                 <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
                                     <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-                                    This is an energy-planning estimate, not a real-time power controller. Daily kWh balance does not guarantee that solar power will cover every appliance at every moment. Battery storage, grid import/export, startup surges, and other household loads are not included.
+                                    Planning estimate only, not a real-time controller. It excludes other household loads, motor startup surges, wiring losses, battery operation, and grid import/export. AC and refrigerator consumption varies with thermostat, ambient conditions, and duty cycle; enter estimated running hours and average running wattage. Actual solar output may differ from forecast.
                                 </p>
                             </div>
                         </section>
@@ -363,7 +383,7 @@
         // Change to http://127.0.0.1:8000 while testing against your local backend.
         window.SOLAR_API_BASE = window.SOLAR_API_BASE || 'https://solar-predictions.onrender.com';
     </script>
-    <script src="app.js?v=stage2-appliance-planner-20261103"></script>
+    <script src="app.js?v=stage2-1-hourly-planner-20261103"></script>
 </body>
 
 </html>
