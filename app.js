@@ -286,6 +286,207 @@ function populateSolarInsights(hourly, outlook) {
     setText('rainImpactValue', Number.isFinite(rain) ? `${fmt(rain, 1)} mm` : 'Unavailable');
 }
 
+
+// Stage 2: Appliance planner. Values are user-editable; preset wattages are illustrative.
+const APPLIANCE_PRESETS = {
+    fan: { name: 'Ceiling fan', watts: 75, quantity: 1, hours: 8, flexible: true },
+    led: { name: 'LED bulb', watts: 12, quantity: 1, hours: 5, flexible: true },
+    tv: { name: 'LED television', watts: 100, quantity: 1, hours: 4, flexible: true },
+    refrigerator: { name: 'Refrigerator', watts: 150, quantity: 1, hours: 8, flexible: false },
+    ac: { name: 'Inverter AC', watts: 1200, quantity: 1, hours: 6, flexible: true },
+    washing: { name: 'Washing machine', watts: 500, quantity: 1, hours: 1, flexible: true },
+    pump: { name: 'Water pump', watts: 750, quantity: 1, hours: 1, flexible: true },
+    custom: { name: 'Custom appliance', watts: 100, quantity: 1, hours: 1, flexible: true }
+};
+let latestPrediction = null;
+let applianceRowCounter = 0;
+
+function applianceRowEnergy(row) {
+    const watts = Number(row.querySelector('[data-field="watts"]').value);
+    const quantity = Number(row.querySelector('[data-field="quantity"]').value);
+    const hours = Number(row.querySelector('[data-field="hours"]').value);
+    if (![watts, quantity, hours].every(Number.isFinite) || watts <= 0 || quantity <= 0 || hours < 0 || hours > 24) return null;
+    return watts * quantity * hours / 1000;
+}
+
+function updateApplianceTotal() {
+    let total = 0;
+    let valid = true;
+    document.querySelectorAll('.appliance-row').forEach(row => {
+        const energy = applianceRowEnergy(row);
+        const output = row.querySelector('[data-field="energy"]');
+        if (energy === null) {
+            valid = false;
+            output.textContent = 'Check inputs';
+        } else {
+            total += energy;
+            output.textContent = `${energy.toFixed(2)} kWh`;
+        }
+    });
+    setText('applianceTotal', valid ? `${total.toFixed(2)} kWh/day` : 'Check appliance inputs');
+    return valid ? total : null;
+}
+
+function addApplianceRow(presetKey) {
+    const preset = APPLIANCE_PRESETS[presetKey] || APPLIANCE_PRESETS.custom;
+    const body = byId('applianceRows');
+    const empty = byId('applianceEmptyRow');
+    if (empty) empty.remove();
+
+    const row = document.createElement('tr');
+    row.className = 'appliance-row';
+    row.dataset.rowId = String(++applianceRowCounter);
+
+    const nameCell = document.createElement('td');
+    nameCell.className = 'px-2 py-2';
+    const name = document.createElement('input');
+    name.className = 'appliance-name-input text-xs';
+    name.value = preset.name;
+    name.maxLength = 50;
+    name.setAttribute('aria-label', 'Appliance name');
+    name.dataset.field = 'name';
+    nameCell.appendChild(name);
+
+    const addNumberCell = (field, value, min, max, step) => {
+        const td = document.createElement('td');
+        td.className = 'px-2 py-2';
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.className = 'appliance-input text-xs';
+        input.dataset.field = field;
+        input.value = value;
+        input.min = min;
+        input.max = max;
+        input.step = step;
+        input.setAttribute('aria-label', field);
+        td.appendChild(input);
+        return td;
+    };
+
+    row.appendChild(nameCell);
+    row.appendChild(addNumberCell('watts', preset.watts, '1', '100000', '1'));
+    row.appendChild(addNumberCell('quantity', preset.quantity, '1', '100', '1'));
+    row.appendChild(addNumberCell('hours', preset.hours, '0', '24', '0.5'));
+
+    const flexibleCell = document.createElement('td');
+    flexibleCell.className = 'px-2 py-2 text-center';
+    const flexible = document.createElement('input');
+    flexible.type = 'checkbox';
+    flexible.checked = preset.flexible;
+    flexible.dataset.field = 'flexible';
+    flexible.setAttribute('aria-label', 'Can shift to daytime');
+    flexibleCell.appendChild(flexible);
+    row.appendChild(flexibleCell);
+
+    const energyCell = document.createElement('td');
+    energyCell.className = 'px-2 py-2 text-right whitespace-nowrap font-semibold text-slate-700';
+    energyCell.dataset.field = 'energy';
+    energyCell.textContent = '0.00 kWh';
+    row.appendChild(energyCell);
+
+    const removeCell = document.createElement('td');
+    removeCell.className = 'px-2 py-2 text-right';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'text-red-600 hover:text-red-800 px-2 py-1';
+    remove.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
+    remove.setAttribute('aria-label', 'Remove appliance');
+    remove.addEventListener('click', () => {
+        row.remove();
+        if (!document.querySelector('.appliance-row')) {
+            const emptyRow = document.createElement('tr');
+            emptyRow.id = 'applianceEmptyRow';
+            emptyRow.innerHTML = '<td colspan="7" class="px-2 py-5 text-center text-slate-500">Add appliances to estimate your daily consumption.</td>';
+            body.appendChild(emptyRow);
+        }
+        updateApplianceTotal();
+        byId('applianceResults').classList.add('hidden');
+    });
+    removeCell.appendChild(remove);
+    row.appendChild(removeCell);
+
+    row.addEventListener('input', () => {
+        updateApplianceTotal();
+        byId('applianceResults').classList.add('hidden');
+    });
+    row.addEventListener('change', () => {
+        updateApplianceTotal();
+        byId('applianceResults').classList.add('hidden');
+    });
+    body.appendChild(row);
+    updateApplianceTotal();
+}
+
+function bestSolarWindow(hourly, durationHours) {
+    const count = Math.max(1, Math.min(24, Math.ceil(durationHours)));
+    let best = null;
+    for (let start = 0; start <= hourly.length - count; start++) {
+        const slice = hourly.slice(start, start + count);
+        const energy = slice.reduce((sum, item) => sum + Math.max(0, Number(item.predicted_energy_kwh) || 0), 0);
+        if (!best || energy > best.energy) best = { start, end: start + count, energy };
+    }
+    return best;
+}
+
+function calculateAppliancePlan() {
+    const total = updateApplianceTotal();
+    const error = byId('applianceError');
+    error.textContent = '';
+    if (total === null) {
+        error.textContent = 'Correct all appliance values. Wattage and quantity must be positive; hours must be between 0 and 24.';
+        return;
+    }
+    if (!document.querySelector('.appliance-row')) {
+        error.textContent = 'Add at least one appliance before calculating.';
+        return;
+    }
+    if (!latestPrediction || !Array.isArray(latestPrediction.hourly)) {
+        error.textContent = 'First calculate tomorrow’s solar generation using the Predict button.';
+        return;
+    }
+
+    const generation = Number(latestPrediction.total_daily_kwh);
+    const balance = generation - total;
+    setText('plannerGeneration', `${generation.toFixed(2)} kWh`);
+    setText('plannerConsumption', `${total.toFixed(2)} kWh`);
+    setText('plannerBalance', `${balance >= 0 ? '+' : ''}${balance.toFixed(2)} kWh`);
+    byId('plannerBalance').style.color = balance >= 0 ? '#0f766e' : '#b91c1c';
+
+    const recommendations = [];
+    document.querySelectorAll('.appliance-row').forEach(row => {
+        const name = row.querySelector('[data-field="name"]').value.trim() || 'Unnamed appliance';
+        const watts = Number(row.querySelector('[data-field="watts"]').value);
+        const quantity = Number(row.querySelector('[data-field="quantity"]').value);
+        const hours = Number(row.querySelector('[data-field="hours"]').value);
+        const flexible = row.querySelector('[data-field="flexible"]').checked;
+        if (flexible && hours > 0) {
+            const window = bestSolarWindow(latestPrediction.hourly, hours);
+            const startTime = latestPrediction.hourly[window.start].time.slice(11, 16);
+            const endTime = window.end >= 24 ? '24:00' : latestPrediction.hourly[window.end].time.slice(11, 16);
+            recommendations.push(`<div class="rounded-lg bg-teal-50 border border-teal-100 p-3"><strong class="text-slate-800">${escapeHtml(name)}</strong>: try scheduling around <strong class="text-teal-800">${startTime}–${endTime}</strong> (${Math.ceil(hours)}-hour high-generation window).</div>`);
+        } else if (hours > 0) {
+            recommendations.push(`<div class="rounded-lg bg-slate-50 border border-slate-200 p-3"><strong class="text-slate-800">${escapeHtml(name)}</strong>: marked as non-flexible; run when needed. Its estimated consumption is ${(watts * quantity * hours / 1000).toFixed(2)} kWh/day.</div>`);
+        }
+    });
+    if (!recommendations.length) recommendations.push('<p>No flexible appliances with operating hours were selected.</p>');
+
+    let balanceNote = '';
+    if (balance >= 0) {
+        balanceNote = `<p class="text-sm font-semibold text-teal-800 mb-2">Daily energy estimate: predicted generation is ${balance.toFixed(2)} kWh higher than the listed appliance use.</p>`;
+    } else {
+        balanceNote = `<p class="text-sm font-semibold text-red-700 mb-2">Daily energy estimate: listed appliance use exceeds predicted generation by ${Math.abs(balance).toFixed(2)} kWh.</p>`;
+    }
+    byId('applianceRecommendations').innerHTML = balanceNote + recommendations.join('');
+    byId('applianceResults').classList.remove('hidden');
+}
+
+function escapeHtml(value) {
+    return String(value).replace(/[&<>"']/g, char => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    })[char]);
+}
+
+
 async function runPrediction(event) {
     event.preventDefault();
     const capacity = Number(byId('systemKw').value);
@@ -322,6 +523,7 @@ async function runPrediction(event) {
             throw new Error('The prediction API returned no hourly forecast data.');
         }
 
+        latestPrediction = payload;
         byId('finalKwh').textContent = fmt(payload.total_daily_kwh, 2);
         byId('forecastDate').textContent = payload.date;
         updateOutlook(payload.outlook);
@@ -346,6 +548,17 @@ async function runPrediction(event) {
 document.addEventListener('DOMContentLoaded', () => {
     loadWeatherOnPageOpen();
     byId('predictionForm').addEventListener('submit', runPrediction);
+    byId('addApplianceButton').addEventListener('click', () => {
+        const select = byId('appliancePreset');
+        if (!select.value) {
+            setText('applianceError', 'Choose an appliance first.');
+            return;
+        }
+        addApplianceRow(select.value);
+        select.value = '';
+        setText('applianceError', '');
+    });
+    byId('calculateAppliancesButton').addEventListener('click', calculateAppliancePlan);
     const updateClock = () => {
         byId('current_time_display').textContent = new Intl.DateTimeFormat('en-US', {
             timeZone: 'Asia/Karachi',

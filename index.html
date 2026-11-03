@@ -258,6 +258,90 @@
                                 These are estimates based on hourly forecast data. Actual generation can differ because of changing weather, shading, dust, system condition, and inverter limits.
                             </p>
                         </section>
+
+                        <!-- Stage 2: Appliance Planner -->
+                        <section id="appliancePlanner" class="space-y-4" aria-labelledby="appliancePlannerHeading">
+                            <div>
+                                <h4 id="appliancePlannerHeading" class="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                                    <i class="fa-solid fa-plug-circle-bolt text-teal-600 mr-2"></i>Appliance Energy Planner
+                                </h4>
+                                <p class="text-xs text-slate-500 mt-1">Estimate tomorrow's electricity use and identify good daytime hours for flexible appliances.</p>
+                            </div>
+
+                            <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
+                                    <label class="sr-only" for="appliancePreset">Choose an appliance to add</label>
+                                    <select id="appliancePreset" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm">
+                                        <option value="">Choose an appliance to add...</option>
+                                        <option value="fan">Ceiling fan — 75 W</option>
+                                        <option value="led">LED bulb — 12 W</option>
+                                        <option value="tv">LED television — 100 W</option>
+                                        <option value="refrigerator">Refrigerator — 150 W</option>
+                                        <option value="ac">Inverter AC — 1200 W</option>
+                                        <option value="washing">Washing machine — 500 W</option>
+                                        <option value="pump">Water pump — 750 W</option>
+                                        <option value="custom">Custom appliance</option>
+                                    </select>
+                                    <button type="button" id="addApplianceButton" class="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
+                                        <i class="fa-solid fa-plus mr-1"></i> Add
+                                    </button>
+                                </div>
+                                <p class="text-xs text-slate-500">Preset wattages are examples. Check the appliance label and replace the wattage with its actual rating. For a refrigerator, enter estimated compressor running hours, not all 24 clock hours.</p>
+                                <div class="overflow-x-auto">
+                                    <table class="w-full min-w-[650px] text-left text-xs">
+                                        <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
+                                            <tr>
+                                                <th class="px-2 py-2">Appliance</th>
+                                                <th class="px-2 py-2">Watts</th>
+                                                <th class="px-2 py-2">Qty</th>
+                                                <th class="px-2 py-2">Hours/day</th>
+                                                <th class="px-2 py-2">Flexible?</th>
+                                                <th class="px-2 py-2 text-right">kWh/day</th>
+                                                <th class="px-2 py-2"></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="applianceRows" class="divide-y divide-slate-100">
+                                            <tr id="applianceEmptyRow"><td colspan="7" class="px-2 py-5 text-center text-slate-500">Add appliances to estimate your daily consumption.</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-slate-200 pt-3">
+                                    <p class="text-sm font-semibold text-slate-700">Total planned consumption: <span id="applianceTotal" class="text-teal-700">0.00 kWh/day</span></p>
+                                    <button type="button" id="calculateAppliancesButton" class="rounded-lg border border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
+                                        Calculate energy plan
+                                    </button>
+                                </div>
+                                <p id="applianceError" role="alert" class="text-xs text-red-700"></p>
+                            </div>
+
+                            <div id="applianceResults" class="hidden space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <article class="planner-metric">
+                                        <p class="planner-label">Predicted solar generation</p>
+                                        <p id="plannerGeneration" class="planner-value">--</p>
+                                    </article>
+                                    <article class="planner-metric">
+                                        <p class="planner-label">Planned appliance use</p>
+                                        <p id="plannerConsumption" class="planner-value">--</p>
+                                    </article>
+                                    <article class="planner-metric">
+                                        <p class="planner-label">Energy balance</p>
+                                        <p id="plannerBalance" class="planner-value">--</p>
+                                    </article>
+                                </div>
+                                <div class="rounded-xl border border-slate-200 bg-white p-4">
+                                    <h5 class="text-sm font-bold text-slate-700 mb-2">Suggested daytime operating windows</h5>
+                                    <div id="applianceRecommendations" class="space-y-2 text-sm text-slate-600">
+                                        Add appliances and calculate your plan to see suggestions.
+                                    </div>
+                                </div>
+                                <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
+                                    This is an energy-planning estimate, not a real-time power controller. Daily kWh balance does not guarantee that solar power will cover every appliance at every moment. Battery storage, grid import/export, startup surges, and other household loads are not included.
+                                </p>
+                            </div>
+                        </section>
+
                     </div>
                 </div>
             </div>
@@ -279,7 +363,7 @@
         // Change to http://127.0.0.1:8000 while testing against your local backend.
         window.SOLAR_API_BASE = window.SOLAR_API_BASE || 'https://solar-predictions.onrender.com';
     </script>
-    <script src="app.js?v=frontend-weather-cache-20261103"></script>
+    <script src="app.js?v=stage2-appliance-planner-20261103"></script>
 </body>
 
 </html>
