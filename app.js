@@ -28,7 +28,7 @@ function updateOutlook(data) {
 }
 
 const WEATHER_CACHE_KEY = 'solar_open_meteo_forecast_v1';
-const WEATHER_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+const WEATHER_CACHE_TTL_MS = 1 * 60 * 60 * 1000;
 const WEATHER_VARIABLES = [
     'temperature_2m', 'relative_humidity_2m', 'cloud_cover',
     'shortwave_radiation', 'direct_normal_irradiance', 'diffuse_radiation',
