@@ -27,8 +27,6 @@ function updateOutlook(data) {
     byId('precip_display').textContent = `${fmt(data.precipitation_mm, 1)} mm`;
 }
 
-const WEATHER_CACHE_KEY = 'solar_open_meteo_forecast_v1';
-const WEATHER_CACHE_TTL_MS = 1 * 60 * 60 * 1000;
 const WEATHER_VARIABLES = [
     'temperature_2m', 'relative_humidity_2m', 'cloud_cover',
     'shortwave_radiation', 'direct_normal_irradiance', 'diffuse_radiation',
@@ -51,36 +49,16 @@ function tomorrowInPakistan() {
     return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
-function readCachedForecast(targetDate) {
-    try {
-        const raw = localStorage.getItem(WEATHER_CACHE_KEY);
-        if (!raw) return null;
-        const cached = JSON.parse(raw);
-        const age = Date.now() - Number(cached.savedAt);
-        if (cached.date !== targetDate || !Number.isFinite(age) || age < 0 || age >= WEATHER_CACHE_TTL_MS) {
-            return null;
-        }
-        if (!cached.hourly || !cached.daily || cached.hourly.time?.length !== 24) return null;
-        return cached;
-    } catch (error) {
-        console.warn('Could not read browser weather cache:', error);
-        return null;
-    }
-}
-
 async function fetchWeatherBundle() {
     const targetDate = tomorrowInPakistan();
-    const cached = readCachedForecast(targetDate);
-    if (cached) {
-        console.info('Using browser-cached Open-Meteo forecast.');
-        return cached;
-    }
 
-    // Read installation coordinates and array orientation from the backend so
-    // the browser requests exactly the same site/tilt/azimuth as the model.
+    // Fetch site coordinates/orientation from our backend, then call Open-Meteo
+    // directly from the browser. No persistent weather cache is used.
     const systemResponse = await fetch(`${API_BASE}/api/system`);
     const system = await systemResponse.json().catch(() => ({}));
-    if (!systemResponse.ok) throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
+    if (!systemResponse.ok) {
+        throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
+    }
 
     const params = new URLSearchParams({
         latitude: system.latitude,
@@ -93,6 +71,7 @@ async function fetchWeatherBundle() {
         start_date: targetDate,
         end_date: targetDate
     });
+
     const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.error) {
@@ -102,11 +81,21 @@ async function fetchWeatherBundle() {
         throw new Error('Open-Meteo did not return a complete 24-hour forecast.');
     }
 
-    const bundle = { date: targetDate, hourly: payload.hourly, daily: payload.daily, savedAt: Date.now() };
-    try { localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify(bundle)); }
-    catch (error) { console.warn('Browser cache could not be saved:', error); }
-    console.info('Fetched and cached a new Open-Meteo forecast for six hours.');
-    return bundle;
+    const missingHourly = WEATHER_VARIABLES.filter(name =>
+        !Array.isArray(payload.hourly[name]) || payload.hourly[name].length !== 24 ||
+        payload.hourly[name].some(value => value === null || !Number.isFinite(Number(value)))
+    );
+    if (missingHourly.length) {
+        throw new Error(`Forecast is incomplete. Missing or invalid hourly data: ${missingHourly.join(', ')}`);
+    }
+    for (const field of ['temperature_2m_max', 'precipitation_sum', 'weather_code']) {
+        if (!Array.isArray(payload.daily[field]) || payload.daily[field].length < 1 ||
+            !Number.isFinite(Number(payload.daily[field][0]))) {
+            throw new Error(`Forecast is missing valid daily data: ${field}`);
+        }
+    }
+
+    return { date: targetDate, hourly: payload.hourly, daily: payload.daily };
 }
 
 function outlookFromBundle(bundle) {
@@ -117,14 +106,20 @@ function outlookFromBundle(bundle) {
     };
 }
 
-async function ensureForecastBundle() {
-    const targetDate = tomorrowInPakistan();
-    if (forecastBundle && forecastBundle.date === targetDate && Date.now() - forecastBundle.savedAt < WEATHER_CACHE_TTL_MS) {
-        return forecastBundle;
+function ensureForecastBundle() {
+    // A single in-memory request is shared by page initialization and any retry.
+    if (forecastBundle && forecastBundle.date === tomorrowInPakistan()) {
+        return Promise.resolve(forecastBundle);
     }
     if (!forecastLoadPromise) {
         forecastLoadPromise = fetchWeatherBundle()
-            .then(bundle => { forecastBundle = bundle; return bundle; })
+            .then(bundle => {
+                forecastBundle = bundle;
+                return bundle;
+            })
+            .catch(error => {
+                throw error;
+            })
             .finally(() => { forecastLoadPromise = null; });
     }
     return forecastLoadPromise;
@@ -133,16 +128,22 @@ async function ensureForecastBundle() {
 async function loadWeatherOnPageOpen() {
     const description = byId('weather_description');
     const icon = byId('weather_icon');
+    const retryButton = byId('retryWeatherButton');
     description.textContent = 'Loading tomorrow\'s forecast...';
     icon.textContent = '⏳';
+    if (retryButton) retryButton.classList.add('hidden');
+
     try {
         forecastBundle = await ensureForecastBundle();
         updateOutlook(outlookFromBundle(forecastBundle));
         const dateEl = byId('weather_forecast_date');
         if (dateEl) dateEl.textContent = forecastBundle.date;
+        if (retryButton) retryButton.classList.add('hidden');
     } catch (error) {
+        forecastBundle = null;
         description.textContent = 'Forecast temporarily unavailable';
         icon.textContent = '⚠️';
+        if (retryButton) retryButton.classList.remove('hidden');
         console.error('Unable to load weather preview:', error);
     }
 }
@@ -343,15 +344,7 @@ function createDailyConsumptionPlan() {
     advice.push(`<article class="planner-recommendation"><strong>Prioritize daytime usage</strong><p>Try to run flexible, high-energy appliances during the strongest forecast solar window: <strong>${startLabel}–${endLabel}</strong>. This is the best consecutive three-hour period by forecast energy, not a guarantee that all loads will be solar-powered.</p></article>`);
     advice.push(`<article class="planner-recommendation planner-neutral"><strong>Best individual production hour</strong><p>The highest forecast production hour is around <strong>${peakTime}</strong>. Where practical, use this period for tasks such as pumping water, washing clothes, or other flexible activities.</p></article>`);
 
-    if (difference > 0.5) {
-        advice.push(`<article class="planner-recommendation planner-good"><strong>Forecast generation is higher than your daily use</strong><p>The forecast is ${difference.toFixed(2)} kWh above your stated daily consumption. Shift flexible usage into daylight hours to make better use of solar generation. This daily surplus is not necessarily actual exported energy.</p></article>`);
-    } else if (difference < -0.5) {
-        advice.push(`<article class="planner-recommendation planner-warning"><strong>Your stated daily use is higher than forecast generation</strong><p>Consumption is ${Math.abs(difference).toFixed(2)} kWh above predicted generation. Prioritize essential loads and move flexible usage into the strongest solar hours. Grid or battery support may be needed depending on your system and the timing of your loads.</p></article>`);
-    } else {
-        advice.push(`<article class="planner-recommendation planner-neutral"><strong>Daily generation and consumption are close</strong><p>Your forecast generation is within 0.5 kWh of your stated daily use. Timing still matters: try to align flexible appliance use with daylight production.</p></article>`);
-    }
 
-    advice.push(`<p class="text-xs text-slate-500">Forecast generation is approximately ${generationShare.toFixed(0)}% of your stated daily consumption. The comparison uses daily totals only; it cannot calculate exact self-consumption, grid import, or export without your hourly load pattern.</p>`);
     byId('dailyPlanAdvice').innerHTML = advice.join('');
     byId('dailyPlanResults').classList.remove('hidden');
 }
@@ -379,7 +372,9 @@ async function runPrediction(event) {
     submit.disabled = true;
 
     try {
-        forecastBundle = await ensureForecastBundle();
+        if (!forecastBundle || forecastBundle.date !== tomorrowInPakistan()) {
+            throw new Error('Tomorrow\'s weather forecast is not ready. Please wait for it to load or use Retry forecast.');
+        }
         const response = await fetch(`${API_BASE}/api/predict/tomorrow`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -422,6 +417,20 @@ async function runPrediction(event) {
 
 document.addEventListener('DOMContentLoaded', () => {
     loadWeatherOnPageOpen();
+    const retryWeatherButton = byId('retryWeatherButton');
+    if (retryWeatherButton) {
+        retryWeatherButton.addEventListener('click', async () => {
+            retryWeatherButton.disabled = true;
+            retryWeatherButton.textContent = 'Retrying...';
+            forecastBundle = null;
+            try {
+                await loadWeatherOnPageOpen();
+            } finally {
+                retryWeatherButton.disabled = false;
+                retryWeatherButton.textContent = 'Retry forecast';
+            }
+        });
+    }
     byId('predictionForm').addEventListener('submit', runPrediction);
     byId('calculateDailyPlanButton').addEventListener('click', createDailyConsumptionPlan);
     byId('dailyConsumptionKwh').addEventListener('input', () => {
