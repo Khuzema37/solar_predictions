@@ -20,11 +20,12 @@ function weatherDescription(code) {
 }
 
 function updateOutlook(data) {
-    const [description, icon] = weatherDescription(data.weather_code);
-    byId('weather_description').textContent = description;
-    byId('weather_icon').textContent = icon;
-    byId('temp_display').textContent = `${fmt(data.max_temperature_c, 1)} °C`;
-    byId('precip_display').textContent = `${fmt(data.precipitation_mm, 1)} mm`;
+    if (!data) return;
+    const [description, icon] = weatherDescription(Number(data.weather_code));
+    setText('weather_description', description);
+    setText('weather_icon', icon);
+    setText('temp_display', `${fmt(data.max_temperature_c, 1)} °C`);
+    setText('precip_display', `${fmt(data.precipitation_mm, 1)} mm`);
 }
 
 const WEATHER_VARIABLES = [
@@ -129,8 +130,8 @@ async function loadWeatherOnPageOpen() {
     const description = byId('weather_description');
     const icon = byId('weather_icon');
     const retryButton = byId('retryWeatherButton');
-    description.textContent = 'Loading tomorrow\'s forecast...';
-    icon.textContent = '⏳';
+    setText('weather_description', 'Loading tomorrow\'s forecast...');
+    setText('weather_icon', '⏳');
     if (retryButton) retryButton.classList.add('hidden');
 
     try {
@@ -416,10 +417,13 @@ async function runPrediction(event) {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    // Fetch a fresh forecast once for this page session. Predict reuses forecastBundle.
     loadWeatherOnPageOpen();
+
     const retryWeatherButton = byId('retryWeatherButton');
     if (retryWeatherButton) {
         retryWeatherButton.addEventListener('click', async () => {
+            if (forecastLoadPromise) return;
             retryWeatherButton.disabled = true;
             retryWeatherButton.textContent = 'Retrying...';
             forecastBundle = null;
@@ -431,19 +435,35 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    byId('predictionForm').addEventListener('submit', runPrediction);
-    byId('calculateDailyPlanButton').addEventListener('click', createDailyConsumptionPlan);
-    byId('dailyConsumptionKwh').addEventListener('input', () => {
-        byId('dailyPlanResults').classList.add('hidden');
-        setText('dailyPlanError', '');
-    });
+
+    // Bind only elements present in this version of the page. This prevents
+    // a stale/partial HTML deployment from crashing all remaining initialization.
+    const predictionForm = byId('predictionForm');
+    if (predictionForm) predictionForm.addEventListener('submit', runPrediction);
+    else console.error('Missing required HTML element: #predictionForm');
+
+    const calculateButton = byId('calculateDailyPlanButton');
+    if (calculateButton) calculateButton.addEventListener('click', createDailyConsumptionPlan);
+
+    const consumptionInput = byId('dailyConsumptionKwh');
+    if (consumptionInput) {
+        consumptionInput.addEventListener('input', () => {
+            const results = byId('dailyPlanResults');
+            if (results) results.classList.add('hidden');
+            setText('dailyPlanError', '');
+        });
+    }
+
     const updateClock = () => {
-        byId('current_time_display').textContent = new Intl.DateTimeFormat('en-US', {
-            timeZone: 'Asia/Karachi',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        }).format(new Date());
+        const clock = byId('current_time_display');
+        if (clock) {
+            clock.textContent = new Intl.DateTimeFormat('en-US', {
+                timeZone: 'Asia/Karachi',
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            }).format(new Date());
+        }
     };
     updateClock();
     setInterval(updateClock, 1000);
