@@ -287,257 +287,73 @@ function populateSolarInsights(hourly, outlook) {
 }
 
 
-// Stage 2.1: hourly, inverter-aware appliance planning.
-// The API's predicted_energy_kwh is energy over one hour; numerically it is
-// also the average AC kW for that one-hour interval.
-const APPLIANCE_PRESETS = {
-    fan: { name: 'Ceiling fan', watts: 75, quantity: 1, hours: 8, category: 'essential' },
-    led: { name: 'LED bulb', watts: 12, quantity: 1, hours: 5, category: 'essential' },
-    tv: { name: 'LED television', watts: 100, quantity: 1, hours: 4, category: 'schedulable' },
-    refrigerator: { name: 'Refrigerator', watts: 150, quantity: 1, hours: 8, category: 'automatic' },
-    ac: { name: 'Inverter AC', watts: 1200, quantity: 1, hours: 6, category: 'automatic' },
-    washing: { name: 'Washing machine', watts: 500, quantity: 1, hours: 1, category: 'schedulable' },
-    pump: { name: 'Water pump', watts: 750, quantity: 1, hours: 1, category: 'schedulable' },
-    custom: { name: 'Custom appliance', watts: 100, quantity: 1, hours: 1, category: 'schedulable' }
-};
+// Daily consumption planner: compares the user's stated daily kWh with
+// tomorrow's forecast and identifies the strongest consecutive solar window.
+// It intentionally does not infer exact grid import/export without an hourly load profile.
 let latestPrediction = null;
-let applianceRowCounter = 0;
-let plannerChartInstance = null;
 
-function applianceRowValues(row) {
-    const watts = Number(row.querySelector('[data-field="watts"]').value);
-    const quantity = Number(row.querySelector('[data-field="quantity"]').value);
-    const hours = Number(row.querySelector('[data-field="hours"]').value);
-    if (![watts, quantity, hours].every(Number.isFinite) || watts <= 0 || quantity <= 0 ||
-        watts > 100000 || quantity > 100 || hours < 0 || hours > 24 || !Number.isInteger(hours)) return null;
-    return {
-        name: row.querySelector('[data-field="name"]').value.trim() || 'Unnamed appliance',
-        watts, quantity, hours,
-        category: row.querySelector('[data-field="category"]').value,
-        energy: watts * quantity * hours / 1000,
-        demandKw: watts * quantity / 1000
-    };
-}
+function createDailyConsumptionPlan() {
+    const error = byId('dailyPlanError');
+    error.textContent = '';
+    const consumption = Number(byId('dailyConsumptionKwh').value);
 
-function updateApplianceTotal() {
-    let total = 0, valid = true;
-    document.querySelectorAll('.appliance-row').forEach(row => {
-        const item = applianceRowValues(row);
-        const output = row.querySelector('[data-field="energy"]');
-        if (!item) { valid = false; output.textContent = 'Check inputs'; }
-        else { total += item.energy; output.textContent = `${item.energy.toFixed(2)} kWh`; }
-    });
-    setText('applianceTotal', valid ? `${total.toFixed(2)} kWh/day` : 'Check appliance inputs');
-    return valid ? total : null;
-}
-
-function addApplianceRow(presetKey) {
-    const preset = APPLIANCE_PRESETS[presetKey] || APPLIANCE_PRESETS.custom;
-    const body = byId('applianceRows');
-    byId('applianceEmptyRow')?.remove();
-    const row = document.createElement('tr');
-    row.className = 'appliance-row';
-    row.dataset.rowId = String(++applianceRowCounter);
-
-    const nameCell = document.createElement('td');
-    nameCell.className = 'px-2 py-2';
-    const name = document.createElement('input');
-    name.className = 'appliance-name-input text-xs';
-    name.value = preset.name; name.maxLength = 50; name.dataset.field = 'name';
-    name.setAttribute('aria-label', 'Appliance name');
-    nameCell.appendChild(name); row.appendChild(nameCell);
-
-    const addNumberCell = (field, value, min, max, step) => {
-        const td = document.createElement('td'); td.className = 'px-2 py-2';
-        const input = document.createElement('input');
-        input.type = 'number'; input.className = 'appliance-input text-xs';
-        input.dataset.field = field; input.value = value;
-        input.min = min; input.max = max; input.step = step;
-        input.setAttribute('aria-label', field); td.appendChild(input); return td;
-    };
-    row.appendChild(addNumberCell('watts', preset.watts, '1', '100000', '1'));
-    row.appendChild(addNumberCell('quantity', preset.quantity, '1', '100', '1'));
-    row.appendChild(addNumberCell('hours', preset.hours, '0', '24', '1'));
-
-    const categoryCell = document.createElement('td'); categoryCell.className = 'px-2 py-2';
-    const category = document.createElement('select');
-    category.className = 'appliance-category-input text-xs'; category.dataset.field = 'category';
-    category.setAttribute('aria-label', 'Appliance category');
-    [['schedulable','Schedulable'],['essential','Essential'],['automatic','Automatic']].forEach(([value,label]) => {
-        const option = document.createElement('option'); option.value = value; option.textContent = label;
-        category.appendChild(option);
-    });
-    category.value = preset.category; categoryCell.appendChild(category); row.appendChild(categoryCell);
-
-    const energyCell = document.createElement('td');
-    energyCell.className = 'px-2 py-2 text-right whitespace-nowrap font-semibold text-slate-700';
-    energyCell.dataset.field = 'energy'; energyCell.textContent = '0.00 kWh'; row.appendChild(energyCell);
-
-    const removeCell = document.createElement('td'); removeCell.className = 'px-2 py-2 text-right';
-    const remove = document.createElement('button'); remove.type = 'button';
-    remove.className = 'text-red-600 hover:text-red-800 px-2 py-1';
-    remove.innerHTML = '<i class="fa-solid fa-trash" aria-hidden="true"></i>';
-    remove.setAttribute('aria-label', 'Remove appliance');
-    remove.addEventListener('click', () => {
-        row.remove();
-        if (!document.querySelector('.appliance-row')) {
-            const empty = document.createElement('tr'); empty.id = 'applianceEmptyRow';
-            empty.innerHTML = '<td colspan="7" class="px-2 py-5 text-center text-slate-500">Add appliances to estimate your daily consumption.</td>';
-            body.appendChild(empty);
-        }
-        updateApplianceTotal(); byId('applianceResults').classList.add('hidden');
-    });
-    removeCell.appendChild(remove); row.appendChild(removeCell);
-    row.addEventListener('input', () => { updateApplianceTotal(); byId('applianceResults').classList.add('hidden'); });
-    row.addEventListener('change', () => { updateApplianceTotal(); byId('applianceResults').classList.add('hidden'); });
-    body.appendChild(row); updateApplianceTotal();
-}
-
-// Find a contiguous block where each hour's remaining solar headroom can
-// support this appliance's rated running demand. Rank feasible blocks by
-// solar headroom (not merely by total solar energy).
-function findOperatingWindow(solarKw, alreadyScheduledKw, demandKw, durationHours) {
-    const slots = Math.max(1, Math.ceil(durationHours));
-    let best = null;
-    for (let start = 0; start <= solarKw.length - slots; start++) {
-        let feasibleHours = 0, minimumHeadroom = Infinity, totalHeadroom = 0;
-        for (let offset = 0; offset < slots; offset++) {
-            const idx = start + offset;
-            const headroom = Math.max(0, solarKw[idx] - alreadyScheduledKw[idx]);
-            if (headroom + 1e-9 >= demandKw) feasibleHours++;
-            minimumHeadroom = Math.min(minimumHeadroom, headroom);
-            totalHeadroom += Math.min(headroom, demandKw);
-        }
-        const candidate = { start, end: start + slots, feasibleHours, minimumHeadroom, totalHeadroom };
-        if (!best || candidate.feasibleHours > best.feasibleHours ||
-            (candidate.feasibleHours === best.feasibleHours && candidate.totalHeadroom > best.totalHeadroom)) best = candidate;
+    if (!Number.isFinite(consumption) || consumption <= 0 || consumption > 10000) {
+        error.textContent = 'Enter a daily consumption value greater than 0 and no more than 10,000 kWh.';
+        return;
     }
-    return best;
-}
-
-function drawPlannerChart(solarKw, totalLoadKw) {
-    const canvas = byId('plannerHourlyChart');
-    if (!canvas || typeof Chart === 'undefined') return;
-    if (plannerChartInstance) plannerChartInstance.destroy();
-    const labels = latestPrediction.hourly.map(item => item.time.slice(11, 16));
-    plannerChartInstance = new Chart(canvas.getContext('2d'), {
-        type: 'line',
-        data: { labels, datasets: [
-            { label: 'Forecast solar AC output (kW)', data: solarKw, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.12)', fill: true, tension: .25, pointRadius: 1.5 },
-            { label: 'Total estimated appliance load (kW)', data: totalLoadKw, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.08)', fill: false, tension: 0, pointRadius: 1.5 }
-        ]},
-        options: { responsive: true, maintainAspectRatio: false,
-            interaction: { mode: 'index', intersect: false },
-            plugins: { legend: { position: 'bottom' } },
-            scales: { x: { title: { display: true, text: 'Pakistan local time' }, grid: { display: false } },
-                y: { beginAtZero: true, title: { display: true, text: 'Average power (kW)' } } }
-        }
-    });
-}
-
-function calculateAppliancePlan() {
-    const total = updateApplianceTotal();
-    const error = byId('applianceError'); error.textContent = '';
-    const rows = [...document.querySelectorAll('.appliance-row')];
-    if (total === null) { error.textContent = 'Correct all appliance values. Wattage and quantity must be positive; hours must be whole numbers between 0 and 24.'; return; }
-    if (!rows.length) { error.textContent = 'Add at least one appliance before calculating.'; return; }
     if (!latestPrediction || !Array.isArray(latestPrediction.hourly) || latestPrediction.hourly.length !== 24) {
-        error.textContent = 'First calculate tomorrow’s solar generation using the Predict button.'; return;
-    }
-
-    const inverterKw = Number(byId('inverterKw').value);
-    if (!Number.isFinite(inverterKw) || inverterKw <= 0) { error.textContent = 'Enter a valid inverter capacity first.'; return; }
-    const items = rows.map(applianceRowValues);
-    if (items.some(item => !item)) { error.textContent = 'One or more appliance inputs are invalid.'; return; }
-
-    const solarKw = latestPrediction.hourly.map(item =>
-        Math.min(inverterKw, Math.max(0, Number(item.predicted_energy_kwh) || 0)));
-    const scheduledKw = Array(24).fill(0);
-    const recommendations = [];
-    const schedulable = items.filter(item => item.category === 'schedulable' && item.hours > 0);
-    const nonSchedulable = items.filter(item => item.category !== 'schedulable');
-
-    // Schedule largest loads first so small loads do not occupy the best slots.
-    schedulable.sort((a, b) => b.demandKw - a.demandKw);
-    let scheduledEnergy = 0, coveredEnergy = 0;
-    schedulable.forEach(item => {
-        const window = findOperatingWindow(solarKw, scheduledKw, item.demandKw, item.hours);
-        const end = Math.min(24, window.end);
-        const startTime = latestPrediction.hourly[window.start].time.slice(11, 16);
-        const endTime = end >= 24 ? '24:00' : latestPrediction.hourly[end].time.slice(11, 16);
-        const feasible = window.feasibleHours === (window.end - window.start);
-        const hoursPlaced = Math.min(item.hours, window.end - window.start);
-        for (let h = window.start; h < window.end; h++) scheduledKw[h] += item.demandKw;
-        scheduledEnergy += item.energy;
-        if (feasible) {
-            coveredEnergy += item.energy;
-            recommendations.push(`<article class="planner-recommendation"><strong>${escapeHtml(item.name)}</strong><p>Suggested window: <strong>${startTime}–${endTime}</strong> (${item.hours.toFixed(1)} planned operating hours).</p><p class="planner-good">Estimated solar headroom supports the rated load in every selected hour, before unlisted household loads.</p><p class="planner-reason">Reason: minimum available solar headroom in this window is ${window.minimumHeadroom.toFixed(2)} kW; appliance demand is ${item.demandKw.toFixed(2)} kW.</p></article>`);
-        } else {
-            const percent = Math.round(window.feasibleHours / Math.max(1, window.end - window.start) * 100);
-            recommendations.push(`<article class="planner-recommendation planner-warning"><strong>${escapeHtml(item.name)}</strong><p>Best available window: <strong>${startTime}–${endTime}</strong>, but the forecast does not support the full rated load in every hour.</p><p>Only ${window.feasibleHours} of ${window.end - window.start} hours meet the ${item.demandKw.toFixed(2)} kW demand (${percent}%). Consider a shorter run, a lower-power appliance, or grid support.</p><p class="planner-reason">Reason: the selected window has the best combined solar headroom, but full solar coverage cannot be confirmed.</p></article>`);
-        }
-    });
-
-    nonSchedulable.forEach(item => {
-        const categoryText = item.category === 'automatic' ? 'Automatic / cycling load' : 'Essential load';
-        recommendations.push(`<article class="planner-recommendation planner-neutral"><strong>${escapeHtml(item.name)}</strong> <span class="planner-category">${categoryText}</span><p>Do not automatically shift this appliance. Its entered energy estimate is ${item.energy.toFixed(2)} kWh/day (${item.demandKw.toFixed(2)} kW while running).</p><p class="planner-reason">${item.category === 'automatic' ? 'Actual demand varies with thermostat and duty cycle; entered hours should represent estimated compressor or operating hours.' : 'Keep essential usage based on household needs. This planner does not advise delaying essential loads.'}</p></article>`);
-    });
-
-    // Essential and automatic loads have no entered clock-time profile.
-    // Approximate them as a constant average load across all 24 hours.
-    const fixedDailyEnergy = nonSchedulable.reduce((sum, item) => sum + item.energy, 0);
-    const fixedAverageKw = fixedDailyEnergy / 24;
-    const totalLoadKw = scheduledKw.map(value => value + fixedAverageKw);
-
-    // Hourly energy accounting (each forecast point represents one hour).
-    let directSolarKwh = 0;
-    let potentialSurplusKwh = 0;
-    let gridOrBackupKwh = 0;
-    for (let h = 0; h < 24; h++) {
-        directSolarKwh += Math.min(solarKw[h], totalLoadKw[h]);
-        potentialSurplusKwh += Math.max(0, solarKw[h] - totalLoadKw[h]);
-        gridOrBackupKwh += Math.max(0, totalLoadKw[h] - solarKw[h]);
+        error.textContent = 'First calculate tomorrow’s solar generation using the Predict button.';
+        return;
     }
 
     const generation = Number(latestPrediction.total_daily_kwh);
-    const balance = generation - total;
-    const accountedGeneration = directSolarKwh + potentialSurplusKwh;
-    const accountedConsumption = directSolarKwh + gridOrBackupKwh;
+    if (!Number.isFinite(generation) || generation < 0) {
+        error.textContent = 'The solar forecast did not contain a valid daily generation total.';
+        return;
+    }
 
-    setText('plannerGeneration', `${generation.toFixed(2)} kWh`);
-    setText('plannerConsumption', `${total.toFixed(2)} kWh`);
-    setText('plannerBalance', `${balance >= 0 ? '+' : ''}${balance.toFixed(2)} kWh`);
-    setText('plannerDirectUse', `${directSolarKwh.toFixed(2)} kWh`);
-    setText('plannerSurplus', `${potentialSurplusKwh.toFixed(2)} kWh`);
-    const systemType = byId('plannerSystemType').value;
-    setText('plannerGridUse',
-        `${gridOrBackupKwh.toFixed(2)} kWh`);
-    const gridLabel = byId('plannerGridUseLabel');
-    if (gridLabel) gridLabel.textContent = systemType === 'on_grid'
-        ? 'Estimated grid energy required'
-        : 'Estimated battery / backup energy required';
+    const difference = generation - consumption;
+    setText('dailyPlanGeneration', `${generation.toFixed(2)} kWh`);
+    setText('dailyPlanConsumption', `${consumption.toFixed(2)} kWh`);
+    setText('dailyPlanDifference', `${difference >= 0 ? '+' : ''}${difference.toFixed(2)} kWh`);
+    byId('dailyPlanDifference').style.color = difference >= 0 ? '#0f766e' : '#b91c1c';
 
-    byId('plannerBalance').style.color = balance >= 0 ? '#0f766e' : '#b91c1c';
+    const hourly = latestPrediction.hourly.map(item => ({
+        time: item.time,
+        energy: Math.max(0, Number(item.predicted_energy_kwh) || 0)
+    }));
+    let bestStart = 0;
+    let bestEnergy = -1;
+    const windowHours = 3;
+    for (let start = 0; start <= hourly.length - windowHours; start++) {
+        const energy = hourly.slice(start, start + windowHours).reduce((sum, item) => sum + item.energy, 0);
+        if (energy > bestEnergy) {
+            bestEnergy = energy;
+            bestStart = start;
+        }
+    }
+    const startLabel = hourly[bestStart].time.slice(11, 16);
+    const endIndex = bestStart + windowHours;
+    const endLabel = endIndex < hourly.length ? hourly[endIndex].time.slice(11, 16) : '24:00';
+    const peak = hourly.reduce((best, item) => item.energy > best.energy ? item : best, hourly[0]);
+    const peakTime = peak.time.slice(11, 16);
+    const generationShare = consumption > 0 ? generation / consumption * 100 : 0;
 
-    const coverage = total > 0 ? Math.min(100, directSolarKwh / total * 100) : 0;
-    setText('plannerCoverage', total > 0
-        ? `${coverage.toFixed(0)}% of total appliance consumption supplied directly by forecast solar`
-        : 'No appliance consumption entered');
-    setText('plannerPeakLoad', `${Math.max(...totalLoadKw).toFixed(2)} kW`);
-    drawPlannerChart(solarKw, totalLoadKw);
+    const advice = [];
+    advice.push(`<article class="planner-recommendation"><strong>Prioritize daytime usage</strong><p>Try to run flexible, high-energy appliances during the strongest forecast solar window: <strong>${startLabel}–${endLabel}</strong>. This is the best consecutive three-hour period by forecast energy, not a guarantee that all loads will be solar-powered.</p></article>`);
+    advice.push(`<article class="planner-recommendation planner-neutral"><strong>Best individual production hour</strong><p>The highest forecast production hour is around <strong>${peakTime}</strong>. Where practical, use this period for tasks such as pumping water, washing clothes, or other flexible activities.</p></article>`);
 
-    const systemNote = systemType === 'on_grid'
-        ? 'On-grid estimate: the grid may supply the hourly shortfall. Actual grid import and export are not measured.'
-        : 'Hybrid/off-grid estimate: hourly shortfall is shown as battery/backup energy required. Battery charging, storage losses, and discharge limits are not modelled.';
-    const balanceNote = `Daily net difference: ${balance >= 0 ? '+' : ''}${balance.toFixed(2)} kWh. This daily difference is not the same as direct solar use.`;
-    const accountingNote = `Hourly accounting: generation = direct solar use (${directSolarKwh.toFixed(2)} kWh) + potential surplus (${potentialSurplusKwh.toFixed(2)} kWh); consumption = direct solar use (${directSolarKwh.toFixed(2)} kWh) + grid/backup requirement (${gridOrBackupKwh.toFixed(2)} kWh).`;
-    const assumptionNote = `Essential and automatic loads are spread evenly across 24 hours because no clock-time profile is entered. Flexible appliances are placed in their suggested operating windows. The hourly totals reconcile to ${accountedGeneration.toFixed(2)} kWh generation and ${accountedConsumption.toFixed(2)} kWh consumption (small rounding differences may occur).`;
-    byId('applianceRecommendations').innerHTML =
-        `<p class="text-sm font-semibold text-slate-800 mb-2">${escapeHtml(balanceNote)}</p>` +
-        `<p class="text-xs text-slate-600 mb-2">${escapeHtml(accountingNote)}</p>` +
-        `<p class="text-xs text-slate-500 mb-3">${escapeHtml(systemNote)} ${escapeHtml(assumptionNote)} Solar output is capped at the inverter AC capacity.</p>` +
-        (recommendations.length ? recommendations.join('') : '<p>No appliance recommendations are needed for the current inputs.</p>');
-    byId('applianceResults').classList.remove('hidden');
+    if (difference > 0.5) {
+        advice.push(`<article class="planner-recommendation planner-good"><strong>Forecast generation is higher than your daily use</strong><p>The forecast is ${difference.toFixed(2)} kWh above your stated daily consumption. Shift flexible usage into daylight hours to make better use of solar generation. This daily surplus is not necessarily actual exported energy.</p></article>`);
+    } else if (difference < -0.5) {
+        advice.push(`<article class="planner-recommendation planner-warning"><strong>Your stated daily use is higher than forecast generation</strong><p>Consumption is ${Math.abs(difference).toFixed(2)} kWh above predicted generation. Prioritize essential loads and move flexible usage into the strongest solar hours. Grid or battery support may be needed depending on your system and the timing of your loads.</p></article>`);
+    } else {
+        advice.push(`<article class="planner-recommendation planner-neutral"><strong>Daily generation and consumption are close</strong><p>Your forecast generation is within 0.5 kWh of your stated daily use. Timing still matters: try to align flexible appliance use with daylight production.</p></article>`);
+    }
+
+    advice.push(`<p class="text-xs text-slate-500">Forecast generation is approximately ${generationShare.toFixed(0)}% of your stated daily consumption. The comparison uses daily totals only; it cannot calculate exact self-consumption, grid import, or export without your hourly load pattern.</p>`);
+    byId('dailyPlanAdvice').innerHTML = advice.join('');
+    byId('dailyPlanResults').classList.remove('hidden');
 }
 
 function escapeHtml(value) {
@@ -607,17 +423,11 @@ async function runPrediction(event) {
 document.addEventListener('DOMContentLoaded', () => {
     loadWeatherOnPageOpen();
     byId('predictionForm').addEventListener('submit', runPrediction);
-    byId('addApplianceButton').addEventListener('click', () => {
-        const select = byId('appliancePreset');
-        if (!select.value) {
-            setText('applianceError', 'Choose an appliance first.');
-            return;
-        }
-        addApplianceRow(select.value);
-        select.value = '';
-        setText('applianceError', '');
+    byId('calculateDailyPlanButton').addEventListener('click', createDailyConsumptionPlan);
+    byId('dailyConsumptionKwh').addEventListener('input', () => {
+        byId('dailyPlanResults').classList.add('hidden');
+        setText('dailyPlanError', '');
     });
-    byId('calculateAppliancesButton').addEventListener('click', calculateAppliancePlan);
     const updateClock = () => {
         byId('current_time_display').textContent = new Intl.DateTimeFormat('en-US', {
             timeZone: 'Asia/Karachi',

@@ -259,117 +259,54 @@
                             </p>
                         </section>
 
-                        <!-- Stage 2: Appliance Planner -->
-                        <section id="appliancePlanner" class="space-y-4" aria-labelledby="appliancePlannerHeading">
+                        <!-- Daily Consumption Planner -->
+                        <section id="dailyConsumptionPlanner" class="space-y-4" aria-labelledby="dailyConsumptionHeading">
                             <div>
-                                <h4 id="appliancePlannerHeading" class="text-sm font-bold text-slate-700 uppercase tracking-wider">
-                                    <i class="fa-solid fa-plug-circle-bolt text-teal-600 mr-2"></i>Appliance Energy Planner
+                                <h4 id="dailyConsumptionHeading" class="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                                    <i class="fa-solid fa-bolt text-teal-600 mr-2"></i>Daily Electricity Use Plan
                                 </h4>
-                                <p class="text-xs text-slate-500 mt-1">Estimate tomorrow's electricity use and identify good daytime hours for flexible appliances.</p>
+                                <p class="text-xs text-slate-500 mt-1">Enter your household's average daily electricity consumption to get a simple plan based on tomorrow's solar forecast.</p>
                             </div>
 
                             <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg bg-slate-50 p-3">
-                                    <div>
-                                        <label for="plannerSystemType" class="block text-xs font-semibold text-slate-700 mb-1">Solar system type</label>
-                                        <select id="plannerSystemType" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
-                                            <option value="on_grid" selected>On-grid (no battery)</option>
-                                            <option value="hybrid">Hybrid (battery support not modelled)</option>
-                                            <option value="off_grid">Off-grid (battery support not modelled)</option>
-                                        </select>
+                                <div class="max-w-md">
+                                    <label for="dailyConsumptionKwh" class="block text-sm font-semibold text-slate-700 mb-1">Your daily electricity consumption</label>
+                                    <div class="flex items-center gap-2">
+                                        <input id="dailyConsumptionKwh" type="number" min="0.1" max="10000" step="0.1" value="10"
+                                            class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
+                                            placeholder="e.g. 10" inputmode="decimal">
+                                        <span class="text-sm font-semibold text-slate-600 whitespace-nowrap">kWh/day</span>
                                     </div>
-                                    <p class="self-end text-xs text-slate-500">Hourly solar use, potential surplus, and shortfall are estimated. Battery behaviour and actual grid import/export are not measured.</p>
+                                    <p class="text-xs text-slate-500 mt-1">Use your electricity meter or bill to estimate average daily units. 1 electricity unit = 1 kWh.</p>
                                 </div>
-                                <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
-                                    <label class="sr-only" for="appliancePreset">Choose an appliance to add</label>
-                                    <select id="appliancePreset" class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm">
-                                        <option value="">Choose an appliance to add...</option>
-                                        <option value="fan">Ceiling fan — 75 W</option>
-                                        <option value="led">LED bulb — 12 W</option>
-                                        <option value="tv">LED television — 100 W</option>
-                                        <option value="refrigerator">Refrigerator — 150 W</option>
-                                        <option value="ac">Inverter AC — 1200 W</option>
-                                        <option value="washing">Washing machine — 500 W</option>
-                                        <option value="pump">Water pump — 750 W</option>
-                                        <option value="custom">Custom appliance</option>
-                                    </select>
-                                    <button type="button" id="addApplianceButton" class="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
-                                        <i class="fa-solid fa-plus mr-1"></i> Add
-                                    </button>
-                                </div>
-                                <p class="text-xs text-slate-500">Preset wattages are examples. Check the appliance label and replace the wattage with its actual rating. For a refrigerator, enter estimated compressor running hours, not all 24 clock hours.</p>
-                                <div class="planner-table-wrap overflow-x-auto">
-                                    <table class="w-full min-w-[650px] text-left text-xs planner-table">
-                                        <thead class="border-b border-slate-200 bg-slate-50 text-slate-600">
-                                            <tr>
-                                                <th class="px-2 py-2">Appliance</th>
-                                                <th class="px-2 py-2">Watts</th>
-                                                <th class="px-2 py-2">Qty</th>
-                                                <th class="px-2 py-2">Hours/day</th>
-                                                <th class="px-2 py-2">Category</th>
-                                                <th class="px-2 py-2 text-right">kWh/day</th>
-                                                <th class="px-2 py-2"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody id="applianceRows" class="divide-y divide-slate-100">
-                                            <tr id="applianceEmptyRow"><td colspan="7" class="px-2 py-5 text-center text-slate-500">Add appliances to estimate your daily consumption.</td></tr>
-                                        </tbody>
-                                    </table>
-                                </div>
-                                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-t border-slate-200 pt-3">
-                                    <p class="text-sm font-semibold text-slate-700">Total planned consumption: <span id="applianceTotal" class="text-teal-700">0.00 kWh/day</span></p>
-                                    <button type="button" id="calculateAppliancesButton" class="rounded-lg border border-teal-600 px-4 py-2 text-sm font-semibold text-teal-700 hover:bg-teal-50">
-                                        Calculate energy plan
-                                    </button>
-                                </div>
-                                <p id="applianceError" role="alert" class="text-xs text-red-700"></p>
+                                <button type="button" id="calculateDailyPlanButton" class="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
+                                    Create my energy plan
+                                </button>
+                                <p id="dailyPlanError" role="alert" class="text-xs text-red-700"></p>
                             </div>
 
-                            <div id="applianceResults" class="hidden space-y-3">
-                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                            <div id="dailyPlanResults" class="hidden space-y-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
                                     <article class="planner-metric">
-                                        <p class="planner-label">Predicted solar generation</p>
-                                        <p id="plannerGeneration" class="planner-value">--</p>
+                                        <p class="planner-label">Tomorrow's predicted generation</p>
+                                        <p id="dailyPlanGeneration" class="planner-value">--</p>
                                     </article>
                                     <article class="planner-metric">
-                                        <p class="planner-label">Planned appliance use</p>
-                                        <p id="plannerConsumption" class="planner-value">--</p>
+                                        <p class="planner-label">Your daily consumption</p>
+                                        <p id="dailyPlanConsumption" class="planner-value">--</p>
                                     </article>
                                     <article class="planner-metric">
-                                        <p class="planner-label">Solar used directly</p>
-                                        <p id="plannerDirectUse" class="planner-value">--</p>
-                                    </article>
-                                    <article class="planner-metric">
-                                        <p class="planner-label">Potential export / surplus</p>
-                                        <p id="plannerSurplus" class="planner-value">--</p>
-                                    </article>
-                                    <article class="planner-metric">
-                                        <p class="planner-label" id="plannerGridUseLabel">Estimated grid energy required</p>
-                                        <p id="plannerGridUse" class="planner-value">--</p>
-                                    </article>
-                                    <article class="planner-metric">
-                                        <p class="planner-label">Daily net difference</p>
-                                        <p id="plannerBalance" class="planner-value">--</p>
+                                        <p class="planner-label">Daily generation difference</p>
+                                        <p id="dailyPlanDifference" class="planner-value">--</p>
                                     </article>
                                 </div>
                                 <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
-                                    <div>
-                                        <h5 class="text-sm font-bold text-slate-700 mb-1">Hourly solar availability vs planned load</h5>
-                                        <p class="text-xs text-slate-500">Solar is predicted AC output after the inverter limit. Total load includes scheduled flexible appliances plus an even 24-hour average for essential and automatic loads.</p>
-                                    </div>
-                                    <div class="planner-chart-wrap"><canvas id="plannerHourlyChart" aria-label="Hourly solar output and planned appliance load chart"></canvas></div>
-                                    <div class="flex flex-wrap gap-3 text-xs text-slate-500">
-                                        <span>Solar coverage: <strong id="plannerCoverage">--</strong></span>
-                                        <span>Peak scheduled load: <strong id="plannerPeakLoad">--</strong></span>
-                                    </div>
-                                    <h5 class="text-sm font-bold text-slate-700 pt-2 border-t border-slate-100">Suggested operating windows</h5>
-                                    <div id="applianceRecommendations" class="space-y-2 text-sm text-slate-600">
-                                        Add appliances and calculate your plan to see suggestions.
-                                    </div>
+                                    <h5 class="text-sm font-bold text-slate-700">Your suggested plan</h5>
+                                    <div id="dailyPlanAdvice" class="space-y-2 text-sm text-slate-600"></div>
                                 </div>
                                 <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
-                                    <i class="fa-solid fa-triangle-exclamation mr-1"></i>
-                                    Planning estimate only, not a real-time controller. It excludes other household loads, motor startup surges, wiring losses, battery operation, and grid import/export. AC and refrigerator consumption varies with thermostat, ambient conditions, and duty cycle; enter estimated running hours and average running wattage. Actual solar output may differ from forecast.
+                                    <i class="fa-solid fa-circle-info mr-1"></i>
+                                    This is a daily energy comparison and usage suggestion, not an hourly household-load simulation. Actual grid use or export depends on when appliances operate, system configuration, battery availability, and real weather.
                                 </p>
                             </div>
                         </section>
