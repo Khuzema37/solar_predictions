@@ -278,7 +278,7 @@
                                             <option value="off_grid">Off-grid (battery support not modelled)</option>
                                         </select>
                                     </div>
-                                    <p class="self-end text-xs text-slate-500">Stage 2.1 calculates direct solar availability only. Battery behaviour and grid import/export are not simulated.</p>
+                                    <p class="self-end text-xs text-slate-500">Hourly solar use, potential surplus, and shortfall are estimated. Battery behaviour and actual grid import/export are not measured.</p>
                                 </div>
                                 <div class="grid grid-cols-1 sm:grid-cols-[1fr_auto] gap-2">
                                     <label class="sr-only" for="appliancePreset">Choose an appliance to add</label>
@@ -326,7 +326,7 @@
                             </div>
 
                             <div id="applianceResults" class="hidden space-y-3">
-                                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                                     <article class="planner-metric">
                                         <p class="planner-label">Predicted solar generation</p>
                                         <p id="plannerGeneration" class="planner-value">--</p>
@@ -336,14 +336,26 @@
                                         <p id="plannerConsumption" class="planner-value">--</p>
                                     </article>
                                     <article class="planner-metric">
-                                        <p class="planner-label">Energy balance</p>
+                                        <p class="planner-label">Solar used directly</p>
+                                        <p id="plannerDirectUse" class="planner-value">--</p>
+                                    </article>
+                                    <article class="planner-metric">
+                                        <p class="planner-label">Potential export / surplus</p>
+                                        <p id="plannerSurplus" class="planner-value">--</p>
+                                    </article>
+                                    <article class="planner-metric">
+                                        <p class="planner-label" id="plannerGridUseLabel">Estimated grid energy required</p>
+                                        <p id="plannerGridUse" class="planner-value">--</p>
+                                    </article>
+                                    <article class="planner-metric">
+                                        <p class="planner-label">Daily net difference</p>
                                         <p id="plannerBalance" class="planner-value">--</p>
                                     </article>
                                 </div>
                                 <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                                     <div>
                                         <h5 class="text-sm font-bold text-slate-700 mb-1">Hourly solar availability vs planned load</h5>
-                                        <p class="text-xs text-slate-500">Solar is the predicted AC output after the inverter limit. Planned load shows the schedulable appliance demand placed by this planner.</p>
+                                        <p class="text-xs text-slate-500">Solar is predicted AC output after the inverter limit. Total load includes scheduled flexible appliances plus an even 24-hour average for essential and automatic loads.</p>
                                     </div>
                                     <div class="planner-chart-wrap"><canvas id="plannerHourlyChart" aria-label="Hourly solar output and planned appliance load chart"></canvas></div>
                                     <div class="flex flex-wrap gap-3 text-xs text-slate-500">

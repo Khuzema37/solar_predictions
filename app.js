@@ -415,7 +415,7 @@ function findOperatingWindow(solarKw, alreadyScheduledKw, demandKw, durationHour
     return best;
 }
 
-function drawPlannerChart(solarKw, scheduledKw) {
+function drawPlannerChart(solarKw, totalLoadKw) {
     const canvas = byId('plannerHourlyChart');
     if (!canvas || typeof Chart === 'undefined') return;
     if (plannerChartInstance) plannerChartInstance.destroy();
@@ -424,7 +424,7 @@ function drawPlannerChart(solarKw, scheduledKw) {
         type: 'line',
         data: { labels, datasets: [
             { label: 'Forecast solar AC output (kW)', data: solarKw, borderColor: '#0d9488', backgroundColor: 'rgba(13,148,136,.12)', fill: true, tension: .25, pointRadius: 1.5 },
-            { label: 'Scheduled appliance demand (kW)', data: scheduledKw, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.08)', fill: false, tension: 0, pointRadius: 1.5 }
+            { label: 'Total estimated appliance load (kW)', data: totalLoadKw, borderColor: '#d97706', backgroundColor: 'rgba(217,119,6,.08)', fill: false, tension: 0, pointRadius: 1.5 }
         ]},
         options: { responsive: true, maintainAspectRatio: false,
             interaction: { mode: 'index', intersect: false },
@@ -467,10 +467,9 @@ function calculateAppliancePlan() {
         const endTime = end >= 24 ? '24:00' : latestPrediction.hourly[end].time.slice(11, 16);
         const feasible = window.feasibleHours === (window.end - window.start);
         const hoursPlaced = Math.min(item.hours, window.end - window.start);
-        const actualScheduledKw = feasible ? item.demandKw : 0;
+        for (let h = window.start; h < window.end; h++) scheduledKw[h] += item.demandKw;
+        scheduledEnergy += item.energy;
         if (feasible) {
-            for (let h = window.start; h < window.end; h++) scheduledKw[h] += item.demandKw;
-            scheduledEnergy += item.energy;
             coveredEnergy += item.energy;
             recommendations.push(`<article class="planner-recommendation"><strong>${escapeHtml(item.name)}</strong><p>Suggested window: <strong>${startTime}–${endTime}</strong> (${item.hours.toFixed(1)} planned operating hours).</p><p class="planner-good">Estimated solar headroom supports the rated load in every selected hour, before unlisted household loads.</p><p class="planner-reason">Reason: minimum available solar headroom in this window is ${window.minimumHeadroom.toFixed(2)} kW; appliance demand is ${item.demandKw.toFixed(2)} kW.</p></article>`);
         } else {
@@ -484,31 +483,59 @@ function calculateAppliancePlan() {
         recommendations.push(`<article class="planner-recommendation planner-neutral"><strong>${escapeHtml(item.name)}</strong> <span class="planner-category">${categoryText}</span><p>Do not automatically shift this appliance. Its entered energy estimate is ${item.energy.toFixed(2)} kWh/day (${item.demandKw.toFixed(2)} kW while running).</p><p class="planner-reason">${item.category === 'automatic' ? 'Actual demand varies with thermostat and duty cycle; entered hours should represent estimated compressor or operating hours.' : 'Keep essential usage based on household needs. This planner does not advise delaying essential loads.'}</p></article>`);
     });
 
-    // The total energy balance is retained as a daily comparison, not a claim
-    // that all daily consumption is directly solar-powered.
+    // Essential and automatic loads have no entered clock-time profile.
+    // Approximate them as a constant average load across all 24 hours.
+    const fixedDailyEnergy = nonSchedulable.reduce((sum, item) => sum + item.energy, 0);
+    const fixedAverageKw = fixedDailyEnergy / 24;
+    const totalLoadKw = scheduledKw.map(value => value + fixedAverageKw);
+
+    // Hourly energy accounting (each forecast point represents one hour).
+    let directSolarKwh = 0;
+    let potentialSurplusKwh = 0;
+    let gridOrBackupKwh = 0;
+    for (let h = 0; h < 24; h++) {
+        directSolarKwh += Math.min(solarKw[h], totalLoadKw[h]);
+        potentialSurplusKwh += Math.max(0, solarKw[h] - totalLoadKw[h]);
+        gridOrBackupKwh += Math.max(0, totalLoadKw[h] - solarKw[h]);
+    }
+
     const generation = Number(latestPrediction.total_daily_kwh);
     const balance = generation - total;
+    const accountedGeneration = directSolarKwh + potentialSurplusKwh;
+    const accountedConsumption = directSolarKwh + gridOrBackupKwh;
+
     setText('plannerGeneration', `${generation.toFixed(2)} kWh`);
     setText('plannerConsumption', `${total.toFixed(2)} kWh`);
     setText('plannerBalance', `${balance >= 0 ? '+' : ''}${balance.toFixed(2)} kWh`);
+    setText('plannerDirectUse', `${directSolarKwh.toFixed(2)} kWh`);
+    setText('plannerSurplus', `${potentialSurplusKwh.toFixed(2)} kWh`);
+    const systemType = byId('plannerSystemType').value;
+    setText('plannerGridUse',
+        `${gridOrBackupKwh.toFixed(2)} kWh`);
+    const gridLabel = byId('plannerGridUseLabel');
+    if (gridLabel) gridLabel.textContent = systemType === 'on_grid'
+        ? 'Estimated grid energy required'
+        : 'Estimated battery / backup energy required';
+
     byId('plannerBalance').style.color = balance >= 0 ? '#0f766e' : '#b91c1c';
 
-    const availableSolarEnergy = solarKw.reduce((sum, value) => sum + value, 0);
-    const scheduledLoadEnergy = scheduledKw.reduce((sum, value) => sum + value, 0);
-    const coverage = scheduledLoadEnergy > 0 ? Math.min(100, availableSolarEnergy / scheduledLoadEnergy * 100) : 0;
-    setText('plannerCoverage', scheduledLoadEnergy > 0 ? `${coverage.toFixed(0)}% of scheduled energy is within forecast solar energy` : 'No schedulable loads');
-    setText('plannerPeakLoad', `${Math.max(...scheduledKw).toFixed(2)} kW`);
-    drawPlannerChart(solarKw, scheduledKw);
+    const coverage = total > 0 ? Math.min(100, directSolarKwh / total * 100) : 0;
+    setText('plannerCoverage', total > 0
+        ? `${coverage.toFixed(0)}% of total appliance consumption supplied directly by forecast solar`
+        : 'No appliance consumption entered');
+    setText('plannerPeakLoad', `${Math.max(...totalLoadKw).toFixed(2)} kW`);
+    drawPlannerChart(solarKw, totalLoadKw);
 
-    const systemType = byId('plannerSystemType').value;
     const systemNote = systemType === 'on_grid'
-        ? 'On-grid selected: the utility grid may supply shortfalls when available, but grid import/export and outage behaviour are not calculated.'
-        : 'Battery system selected: battery charging/discharging is not modelled in this stage, so recommendations still represent direct solar only.';
-    const balanceNote = balance >= 0
-        ? `Daily generation is ${balance.toFixed(2)} kWh higher than the entered appliance consumption. This daily surplus does not prove hourly coverage.`
-        : `Entered appliance consumption exceeds predicted daily generation by ${Math.abs(balance).toFixed(2)} kWh.`;
+        ? 'On-grid estimate: the grid may supply the hourly shortfall. Actual grid import and export are not measured.'
+        : 'Hybrid/off-grid estimate: hourly shortfall is shown as battery/backup energy required. Battery charging, storage losses, and discharge limits are not modelled.';
+    const balanceNote = `Daily net difference: ${balance >= 0 ? '+' : ''}${balance.toFixed(2)} kWh. This daily difference is not the same as direct solar use.`;
+    const accountingNote = `Hourly accounting: generation = direct solar use (${directSolarKwh.toFixed(2)} kWh) + potential surplus (${potentialSurplusKwh.toFixed(2)} kWh); consumption = direct solar use (${directSolarKwh.toFixed(2)} kWh) + grid/backup requirement (${gridOrBackupKwh.toFixed(2)} kWh).`;
+    const assumptionNote = `Essential and automatic loads are spread evenly across 24 hours because no clock-time profile is entered. Flexible appliances are placed in their suggested operating windows. The hourly totals reconcile to ${accountedGeneration.toFixed(2)} kWh generation and ${accountedConsumption.toFixed(2)} kWh consumption (small rounding differences may occur).`;
     byId('applianceRecommendations').innerHTML =
-        `<p class="text-sm font-semibold text-slate-800 mb-2">${escapeHtml(balanceNote)}</p><p class="text-xs text-slate-500 mb-3">${escapeHtml(systemNote)} Solar headroom is calculated after the inverter AC limit and after other schedulable appliances already placed by this planner.</p>` +
+        `<p class="text-sm font-semibold text-slate-800 mb-2">${escapeHtml(balanceNote)}</p>` +
+        `<p class="text-xs text-slate-600 mb-2">${escapeHtml(accountingNote)}</p>` +
+        `<p class="text-xs text-slate-500 mb-3">${escapeHtml(systemNote)} ${escapeHtml(assumptionNote)} Solar output is capped at the inverter AC capacity.</p>` +
         (recommendations.length ? recommendations.join('') : '<p>No appliance recommendations are needed for the current inputs.</p>');
     byId('applianceResults').classList.remove('hidden');
 }
