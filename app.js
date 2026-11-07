@@ -348,6 +348,33 @@ function populateSolarInsights(hourly, outlook) {
 // tomorrow's forecast and identifies the strongest consecutive solar window.
 // It intentionally does not infer exact grid import/export without an hourly load profile.
 let latestPrediction = null;
+let predictionRequestVersion = 0;
+
+function hideDailyPlanResults() {
+    const results = byId('dailyPlanResults');
+    if (results) results.classList.add('hidden');
+    setText('dailyPlanError', '');
+}
+
+function resetPredictionResults() {
+    // Invalidate any in-flight prediction so it cannot repopulate stale results.
+    predictionRequestVersion += 1;
+    latestPrediction = null;
+
+    const populated = byId('populatedState');
+    const empty = byId('emptyState');
+    if (populated) {
+        populated.classList.add('hidden');
+        populated.classList.remove('flex');
+    }
+    if (empty) {
+        empty.classList.remove('hidden');
+        empty.classList.add('flex');
+    }
+
+    hideDailyPlanResults();
+    setText('errorMessage', '');
+}
 
 function createDailyConsumptionPlan() {
     const error = byId('dailyPlanError');
@@ -421,6 +448,7 @@ async function runPrediction(event) {
     }
 
     const submit = byId('predictButton');
+    const requestVersion = ++predictionRequestVersion;
     byId('errorMessage').textContent = '';
     byId('btnLoader').style.display = 'block';
     byId('btnIcon').classList.add('hidden');
@@ -447,6 +475,13 @@ async function runPrediction(event) {
 
         if (!Array.isArray(payload.hourly) || payload.hourly.length === 0) {
             throw new Error('The prediction API returned no hourly forecast data.');
+        }
+
+        // Ignore a response if the user changed system settings while it was running.
+        if (requestVersion !== predictionRequestVersion ||
+            Number(byId('systemKw').value) !== capacity ||
+            Number(byId('inverterKw').value) !== inverter) {
+            return;
         }
 
         latestPrediction = payload;
@@ -497,16 +532,23 @@ document.addEventListener('DOMContentLoaded', () => {
     if (predictionForm) predictionForm.addEventListener('submit', runPrediction);
     else console.error('Missing required HTML element: #predictionForm');
 
+    // Any change to the solar system configuration invalidates the displayed
+    // prediction and its dependent daily-use plan. Weather remains untouched.
+    ['systemKw', 'inverterKw'].forEach(id => {
+        const input = byId(id);
+        if (input) {
+            input.addEventListener('input', resetPredictionResults);
+            input.addEventListener('change', resetPredictionResults);
+        }
+    });
+
     const calculateButton = byId('calculateDailyPlanButton');
     if (calculateButton) calculateButton.addEventListener('click', createDailyConsumptionPlan);
 
     const consumptionInput = byId('dailyConsumptionKwh');
     if (consumptionInput) {
-        consumptionInput.addEventListener('input', () => {
-            const results = byId('dailyPlanResults');
-            if (results) results.classList.add('hidden');
-            setText('dailyPlanError', '');
-        });
+        consumptionInput.addEventListener('input', hideDailyPlanResults);
+        consumptionInput.addEventListener('change', hideDailyPlanResults);
     }
 
     const updateClock = () => {
