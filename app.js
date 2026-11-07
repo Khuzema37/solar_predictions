@@ -205,24 +205,14 @@ function ensureForecastBundles() {
 function updateForecastDayLabels() {
     const select = byId('forecastDaySelect');
     if (!select) return;
-
+    const today = dateInPakistan();
     const labels = ['Tomorrow', 'Day after tomorrow', 'In two days'];
-    const selectedBeforeRefresh = select.value;
-    select.replaceChildren();
-
-    for (let offset = 1; offset <= 3; offset++) {
-        const date = forecastDateForOffset(offset);
-        const option = document.createElement('option');
+    Array.from(select.options).forEach((option, index) => {
+        const date = forecastDateForOffset(index + 1);
         option.value = date;
-        option.textContent = `${labels[offset - 1]} (${date})`;
-        option.disabled = !forecastBundles[date];
-        select.appendChild(option);
-    }
-
-    const preferredDate = selectedBeforeRefresh && forecastBundles[selectedBeforeRefresh]
-        ? selectedBeforeRefresh
-        : forecastDateForOffset(1);
-    select.value = preferredDate;
+        option.textContent = `${labels[index]} (${date})`;
+    });
+    if (!select.value || !forecastBundles[select.value]) select.value = forecastDateForOffset(1);
 }
 
 function selectForecastDay(date) {
@@ -413,36 +403,22 @@ let latestPrediction = null;
 let predictionRequestVersion = 0;
 
 function animateAndHide(element, onHidden) {
-    if (!element) {
+    if (!element || element.classList.contains('hidden')) {
         if (onHidden) onHidden();
         return;
     }
-
     const oldTimer = resetAnimationTimers.get(element);
     if (oldTimer) clearTimeout(oldTimer);
-
-    const isAlreadyHidden = element.classList.contains('hidden') ||
-        window.getComputedStyle(element).display === 'none';
-    if (isAlreadyHidden) {
-        element.classList.add('hidden');
-        element.style.display = 'none';
-        if (onHidden) onHidden();
-        return;
-    }
-
-    element.classList.remove('hidden');
-    element.style.display = '';
     element.classList.remove('results-fade-out');
-    void element.offsetWidth; // restart animation after rapid consecutive edits
+    // Force a style flush so repeated edits restart the short exit animation.
+    void element.offsetWidth;
     element.classList.add('results-fade-out');
-
     const timer = setTimeout(() => {
-        element.classList.remove('results-fade-out');
         element.classList.add('hidden');
-        element.style.display = 'none';
+        element.classList.remove('results-fade-out');
         resetAnimationTimers.delete(element);
         if (onHidden) onHidden();
-    }, 240);
+    }, 230);
     resetAnimationTimers.set(element, timer);
 }
 
@@ -478,15 +454,10 @@ function resetPredictionResults() {
     const thisResetVersion = predictionRequestVersion;
     animateAndHide(populated, () => {
         if (thisResetVersion !== predictionRequestVersion || latestPrediction) return;
-        if (populated) {
-            populated.classList.remove('flex');
-            populated.classList.add('hidden');
-            populated.style.display = 'none';
-        }
+        if (populated) populated.classList.remove('flex');
         if (empty) {
             empty.classList.remove('hidden');
             empty.classList.add('flex');
-            empty.style.display = 'flex';
         }
     });
     hideDailyPlanResults(true);
@@ -556,6 +527,106 @@ function escapeHtml(value) {
     })[char]);
 }
 
+
+async function exportThreeDayForecast() {
+    const button = byId('exportThreeDayButton');
+    const capacity = Number(byId('systemKw')?.value);
+    const inverter = Number(byId('inverterKw')?.value);
+    if (!Number.isFinite(capacity) || capacity <= 0 || !Number.isFinite(inverter) || inverter <= 0) {
+        setText('exportForecastStatus', 'Enter valid panel and inverter capacities first.');
+        return;
+    }
+    if (!window.XLSX) {
+        setText('exportForecastStatus', 'Excel export library could not load. Refresh the page and try again.');
+        return;
+    }
+    if (!Object.keys(forecastBundles).length) {
+        setText('exportForecastStatus', 'The three-day weather forecast is not ready yet.');
+        return;
+    }
+
+    const originalLabel = button?.textContent || 'Export 3-Day Forecast';
+    if (button) { button.disabled = true; button.textContent = 'Preparing Excel...'; }
+    setText('exportForecastStatus', 'Calculating predictions for all three days...');
+    try {
+        const dates = [1, 2, 3].map(offset => forecastDateForOffset(offset));
+        const predictions = [];
+        for (const date of dates) {
+            const bundle = forecastBundles[date];
+            if (!bundle) throw new Error(`Weather data for ${date} is unavailable. Reload the page and retry.`);
+            const response = await fetch(`${API_BASE}/api/predict`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    capacity_kwp: capacity,
+                    inverter_kw: inverter,
+                    date: bundle.date,
+                    hourly: bundle.hourly,
+                    daily: bundle.daily
+                })
+            });
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) throw new Error(payload.detail || `Prediction failed for ${date} (HTTP ${response.status}).`);
+            if (!Array.isArray(payload.hourly) || payload.hourly.length !== 24) {
+                throw new Error(`Prediction for ${date} did not return 24 hourly records.`);
+            }
+            predictions.push(payload);
+        }
+
+        const summaryRows = predictions.map((p, index) => ({
+            Day: ['Tomorrow', 'Day 2', 'Day 3'][index],
+            Date: p.date,
+            'Predicted generation (kWh)': Number(p.total_daily_kwh),
+            'Physics estimate (kWh)': Number(p.physics_total_kwh),
+            'Maximum temperature (°C)': Number(p.outlook?.max_temperature_c),
+            'Precipitation (mm)': Number(p.outlook?.precipitation_mm),
+            'Weather code': Number(p.outlook?.weather_code),
+            'Panel capacity (kWp)': capacity,
+            'Inverter capacity (kW)': inverter,
+            'Prediction method': p.method,
+            'Method notes': p.method_note
+        }));
+        const workbook = XLSX.utils.book_new();
+        const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
+        summarySheet['!cols'] = [
+            { wch: 14 }, { wch: 14 }, { wch: 25 }, { wch: 23 }, { wch: 25 },
+            { wch: 19 }, { wch: 14 }, { wch: 20 }, { wch: 21 }, { wch: 28 }, { wch: 85 }
+        ];
+        XLSX.utils.book_append_sheet(workbook, summarySheet, '3-Day Summary');
+
+        predictions.forEach((p, index) => {
+            const bundle = forecastBundles[p.date];
+            const rows = p.hourly.map((hour, hourIndex) => ({
+                Date: p.date,
+                Time: hour.time.slice(11, 16),
+                'Predicted generation (kWh)': Number(hour.predicted_energy_kwh),
+                'Physics estimate (kWh)': Number(hour.physics_energy_kwh),
+                'GTI (W/m²)': Number(hour.irradiance_w_m2),
+                'Temperature (°C)': Number(hour.temperature_c),
+                'Cloud cover (%)': Number(hour.cloud_cover_pct),
+                'Relative humidity (%)': Number(bundle.hourly.relative_humidity_2m?.[hourIndex]),
+                'Wind speed (km/h)': Number(bundle.hourly.wind_speed_10m?.[hourIndex]),
+                'Precipitation (mm)': Number(bundle.hourly.precipitation?.[hourIndex])
+            }));
+            const sheet = XLSX.utils.json_to_sheet(rows);
+            sheet['!cols'] = [
+                { wch: 14 }, { wch: 10 }, { wch: 28 }, { wch: 23 }, { wch: 15 },
+                { wch: 18 }, { wch: 17 }, { wch: 25 }, { wch: 22 }, { wch: 22 }
+            ];
+            XLSX.utils.book_append_sheet(workbook, sheet, ['Tomorrow', 'Day 2', 'Day 3'][index]);
+        });
+
+        const filename = `solar_forecast_3_days_${dates[0]}_to_${dates[2]}.xlsx`;
+        XLSX.writeFile(workbook, filename);
+        setText('exportForecastStatus', 'Excel workbook exported successfully.');
+    } catch (error) {
+        console.error('Three-day Excel export failed:', error);
+        setText('exportForecastStatus', error.message || 'Unable to export the three-day forecast.');
+    } finally {
+        if (button) { button.disabled = false; button.textContent = originalLabel; }
+    }
+}
+
 async function runPrediction(event) {
     event.preventDefault();
     const capacity = Number(byId('systemKw').value);
@@ -618,12 +689,8 @@ async function runPrediction(event) {
         populateSolarInsights(payload.hourly, payload.outlook || {});
 
         byId('emptyState').classList.add('hidden');
-        byId('emptyState').style.display = 'none';
-        const populatedState = byId('populatedState');
-        cancelPendingHide(populatedState, true);
-        populatedState.classList.remove('hidden');
-        populatedState.classList.add('flex');
-        populatedState.style.display = 'flex';
+        byId('populatedState').classList.remove('hidden');
+        byId('populatedState').classList.add('flex');
     } catch (error) {
         setText('errorMessage', error.message || 'Could not fetch the forecast.');
         console.error(error);
@@ -680,16 +747,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const dayChangeVersion = predictionRequestVersion;
             animateAndHide(populated, () => {
                 if (dayChangeVersion !== predictionRequestVersion || latestPrediction) return;
-                if (populated) {
-                    populated.classList.remove('flex');
-                    populated.classList.add('hidden');
-                    populated.style.display = 'none';
-                }
-                if (empty) {
-                    empty.classList.remove('hidden');
-                    empty.classList.add('flex');
-                    empty.style.display = 'flex';
-                }
+                if (populated) populated.classList.remove('flex');
+                if (empty) { empty.classList.remove('hidden'); empty.classList.add('flex'); }
             });
             hideDailyPlanResults(true);
             setText('errorMessage', '');
@@ -706,6 +765,9 @@ document.addEventListener('DOMContentLoaded', () => {
             input.addEventListener('change', resetPredictionResults);
         }
     });
+
+    const exportButton = byId('exportThreeDayButton');
+    if (exportButton) exportButton.addEventListener('click', exportThreeDayForecast);
 
     const calculateButton = byId('calculateDailyPlanButton');
     if (calculateButton) calculateButton.addEventListener('click', createDailyConsumptionPlan);

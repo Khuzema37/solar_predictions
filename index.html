@@ -78,9 +78,8 @@
                         <div class="flex items-center justify-between border-b border-sky-100 pb-2 mb-3">
                             <h3
                                 class="text-xs font-bold text-sky-600 uppercase tracking-wider flex items-center gap-1.5">
-                                <i class="fa-solid fa-calendar-day"></i> <span id="weatherOutlookHeading">Tomorrow's
-                                    Outlook</span> <span id="weather_forecast_date"
-                                    class="ml-1 font-medium normal-case"> </span>
+                                <i class="fa-solid fa-calendar-day"></i> <span id="weatherOutlookHeading">Tomorrow's Outlook</span> <span
+                                    id="weather_forecast_date" class="ml-1 font-medium normal-case"> </span>
                             </h3>
                             <span
                                 class="whitespace-nowrap flex-shrink-0 text-xs font-semibold text-slate-500 bg-white/80 px-2.5 py-1 rounded-full border border-sky-100 flex items-center gap-1 shadow-2xs">
@@ -115,6 +114,7 @@
                             </div>
                         </div>
                         <div class="mt-2 flex items-center justify-between gap-3">
+                            <span class="text-xs text-slate-500">Forecast is fetched when this page opens.</span>
                             <button type="button" id="retryWeatherButton"
                                 class="hidden text-xs font-semibold text-teal-700 hover:text-teal-900 underline disabled:opacity-50">
                                 Retry forecast
@@ -138,10 +138,8 @@
                             required>
                     </div>
                     <div class="mb-5">
-                        <label for="forecastDaySelect" class="block text-sm font-medium text-slate-700 mb-1">Forecast
-                            day</label>
-                        <select id="forecastDaySelect"
-                            class="block w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm">
+                        <label for="forecastDaySelect" class="block text-sm font-medium text-slate-700 mb-1">Forecast day</label>
+                        <select id="forecastDaySelect" class="block w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm">
                             <option value="">Loading available days...</option>
                         </select>
                         <p class="mt-1 text-xs text-slate-500">Choose tomorrow or either of the following two days.</p>
@@ -187,6 +185,12 @@
 
                     <!-- Populated State -->
                     <div id="populatedState" class="hidden flex-grow flex-col relative z-10 fade-in space-y-6">
+                        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+                            <button id="exportThreeDayButton" type="button" class="inline-flex items-center justify-center gap-2 rounded-lg bg-emerald-700 hover:bg-emerald-800 disabled:opacity-60 text-white font-semibold px-4 py-2.5 shadow-sm transition-colors">
+                                <i class="fa-solid fa-file-excel"></i> Export 3-Day Forecast (Excel)
+                            </button>
+                            <p id="exportForecastStatus" class="text-xs text-slate-500" role="status" aria-live="polite"></p>
+                        </div>
 
                         <!-- Daily Total Summary Card -->
                         <div
@@ -232,26 +236,22 @@
                         <!-- Stage 1: Solar Usage Insights -->
                         <section class="space-y-4" aria-labelledby="solarInsightsHeading">
                             <div>
-                                <h4 id="solarInsightsHeading"
-                                    class="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                                <h4 id="solarInsightsHeading" class="text-sm font-bold text-slate-700 uppercase tracking-wider">
                                     <i class="fa-solid fa-lightbulb text-amber-500 mr-2"></i>Solar Usage Insights
                                 </h4>
-                                <p class="text-xs text-slate-500 mt-1">Practical guidance calculated from tomorrow's
-                                    hourly forecast.</p>
+                                <p class="text-xs text-slate-500 mt-1">Practical guidance calculated from tomorrow's hourly forecast.</p>
                             </div>
 
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <article class="insight-card">
-                                    <div class="insight-icon bg-amber-50 text-amber-600"><i class="fa-solid fa-sun"></i>
-                                    </div>
+                                    <div class="insight-icon bg-amber-50 text-amber-600"><i class="fa-solid fa-sun"></i></div>
                                     <p class="insight-label">Peak production hour</p>
                                     <p id="peakHourValue" class="insight-value">--</p>
                                     <p id="peakHourNote" class="insight-description">Waiting for forecast data</p>
                                 </article>
 
                                 <article class="insight-card">
-                                    <div class="insight-icon bg-teal-50 text-teal-700"><i class="fa-solid fa-clock"></i>
-                                    </div>
+                                    <div class="insight-icon bg-teal-50 text-teal-700"><i class="fa-solid fa-clock"></i></div>
                                     <p class="insight-label">Strongest 3-hour window</p>
                                     <p id="peakWindowValue" class="insight-value">--</p>
                                     <p id="peakWindowNote" class="insight-description">Waiting for forecast data</p>
@@ -259,62 +259,47 @@
 
                                 <article class="insight-card sm:col-span-2">
                                     <div class="flex items-start gap-3">
-                                        <div class="insight-icon bg-sky-50 text-sky-700"><i
-                                                class="fa-solid fa-cloud-sun"></i></div>
+                                        <div class="insight-icon bg-sky-50 text-sky-700"><i class="fa-solid fa-cloud-sun"></i></div>
                                         <div class="min-w-0 flex-1">
                                             <p class="insight-label">Weather impact on solar generation</p>
                                             <p id="weatherImpactValue" class="insight-value">--</p>
-                                            <p id="weatherImpactNote" class="insight-description">Waiting for forecast
-                                                data</p>
+                                            <p id="weatherImpactNote" class="insight-description">Waiting for forecast data</p>
                                         </div>
                                     </div>
                                     <div class="weather-facts">
-                                        <span><i class="fa-solid fa-cloud"></i> Daylight cloud cover: <strong
-                                                id="daylightCloudValue">--</strong></span>
-                                        <span><i class="fa-solid fa-cloud-rain"></i> Forecast rain: <strong
-                                                id="rainImpactValue">--</strong></span>
+                                        <span><i class="fa-solid fa-cloud"></i> Daylight cloud cover: <strong id="daylightCloudValue">--</strong></span>
+                                        <span><i class="fa-solid fa-cloud-rain"></i> Forecast rain: <strong id="rainImpactValue">--</strong></span>
                                     </div>
                                 </article>
                             </div>
 
-                            <p
-                                class="text-xs text-slate-500 leading-relaxed bg-slate-50 border border-slate-200 rounded-lg p-3">
+                            <p class="text-xs text-slate-500 leading-relaxed bg-slate-50 border border-slate-200 rounded-lg p-3">
                                 <i class="fa-solid fa-circle-info text-sky-600 mr-1"></i>
-                                These are estimates based on hourly forecast data. Actual generation can differ because
-                                of changing weather, shading, dust, system condition, and inverter limits.
+                                These are estimates based on hourly forecast data. Actual generation can differ because of changing weather, shading, dust, system condition, and inverter limits.
                             </p>
                         </section>
 
                         <!-- Daily Consumption Planner -->
-                        <section id="dailyConsumptionPlanner" class="space-y-4"
-                            aria-labelledby="dailyConsumptionHeading">
+                        <section id="dailyConsumptionPlanner" class="space-y-4" aria-labelledby="dailyConsumptionHeading">
                             <div>
-                                <h4 id="dailyConsumptionHeading"
-                                    class="text-sm font-bold text-slate-700 uppercase tracking-wider">
+                                <h4 id="dailyConsumptionHeading" class="text-sm font-bold text-slate-700 uppercase tracking-wider">
                                     <i class="fa-solid fa-bolt text-teal-600 mr-2"></i>Daily Electricity Use Plan
                                 </h4>
-                                <p class="text-xs text-slate-500 mt-1">Enter your household's average daily electricity
-                                    consumption to get a simple plan based on tomorrow's solar forecast.</p>
+                                <p class="text-xs text-slate-500 mt-1">Enter your household's average daily electricity consumption to get a simple plan based on tomorrow's solar forecast.</p>
                             </div>
 
                             <div class="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
                                 <div class="max-w-md">
-                                    <label for="dailyConsumptionKwh"
-                                        class="block text-sm font-semibold text-slate-700 mb-1">Your daily electricity
-                                        consumption</label>
+                                    <label for="dailyConsumptionKwh" class="block text-sm font-semibold text-slate-700 mb-1">Your daily electricity consumption</label>
                                     <div class="flex items-center gap-2">
-                                        <input id="dailyConsumptionKwh" type="number" min="0.1" max="10000" step="0.1"
-                                            value="10"
+                                        <input id="dailyConsumptionKwh" type="number" min="0.1" max="10000" step="0.1" value="10"
                                             class="w-full rounded-lg border border-slate-300 px-3 py-2.5 text-sm"
                                             placeholder="e.g. 10" inputmode="decimal">
-                                        <span
-                                            class="text-sm font-semibold text-slate-600 whitespace-nowrap">kWh/day</span>
+                                        <span class="text-sm font-semibold text-slate-600 whitespace-nowrap">kWh/day</span>
                                     </div>
-                                    <p class="text-xs text-slate-500 mt-1">Use your electricity meter or bill to
-                                        estimate average daily units. 1 electricity unit = 1 kWh.</p>
+                                    <p class="text-xs text-slate-500 mt-1">Use your electricity meter or bill to estimate average daily units. 1 electricity unit = 1 kWh.</p>
                                 </div>
-                                <button type="button" id="calculateDailyPlanButton"
-                                    class="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
+                                <button type="button" id="calculateDailyPlanButton" class="rounded-lg bg-teal-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-teal-700">
                                     Create my energy plan
                                 </button>
                                 <p id="dailyPlanError" role="alert" class="text-xs text-red-700"></p>
@@ -339,12 +324,9 @@
                                     <h5 class="text-sm font-bold text-slate-700">Your suggested plan</h5>
                                     <div id="dailyPlanAdvice" class="space-y-2 text-sm text-slate-600"></div>
                                 </div>
-                                <p
-                                    class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+                                <p class="rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
                                     <i class="fa-solid fa-circle-info mr-1"></i>
-                                    This is a daily energy comparison and usage suggestion, not an hourly household-load
-                                    simulation. Actual grid use or export depends on when appliances operate, system
-                                    configuration, battery availability, and real weather.
+                                    This is a daily energy comparison and usage suggestion, not an hourly household-load simulation. Actual grid use or export depends on when appliances operate, system configuration, battery availability, and real weather.
                                 </p>
                             </div>
                         </section>
@@ -370,7 +352,8 @@
         // Change to http://127.0.0.1:8000 while testing against your local backend.
         window.SOLAR_API_BASE = window.SOLAR_API_BASE || 'https://solar-predictions.onrender.com';
     </script>
-    <script src="app.js?v=three-day-dropdown-reset-fix-20261107"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script src="app.js?v=three-day-excel-export-20261107"></script>
 </body>
 
 </html>
