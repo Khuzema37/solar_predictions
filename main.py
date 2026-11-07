@@ -61,9 +61,18 @@ class ForecastRequest(BaseModel):
 
 def forecast_from_client(request: ForecastRequest):
     """Validate and normalize the exact Open-Meteo forecast sent by app.js."""
-    expected_date = (datetime.now(ZoneInfo(TZ)).date() + timedelta(days=1)).isoformat()
-    if request.date != expected_date:
-        raise HTTPException(status_code=400, detail=f'Forecast date must be tomorrow ({expected_date}). Reload the page and try again.')
+    today = datetime.now(ZoneInfo(TZ)).date()
+    try:
+        requested_date = datetime.strptime(request.date, '%Y-%m-%d').date()
+    except (TypeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail='Forecast date must use YYYY-MM-DD format.') from exc
+    first_allowed = today + timedelta(days=1)
+    last_allowed = today + timedelta(days=3)
+    if not first_allowed <= requested_date <= last_allowed:
+        raise HTTPException(
+            status_code=400,
+            detail=f'Forecast date must be between {first_allowed.isoformat()} and {last_allowed.isoformat()}. Reload the page and try again.'
+        )
 
     required = [
         'time', 'temperature_2m', 'relative_humidity_2m', 'cloud_cover',
@@ -137,7 +146,8 @@ def reference_model(df):
     except (OSError, ValueError, KeyError, TypeError, xgb.core.XGBoostError) as exc:
         raise HTTPException(status_code=500, detail=f'Unable to run trained model: {exc}') from exc
 
-@app.post('/api/predict/tomorrow')
+@app.post('/api/predict')
+@app.post('/api/predict/tomorrow')  # Backwards-compatible alias for older frontends.
 def predict_tomorrow(request: ForecastRequest = Body(...)):
     capacity_kwp = request.capacity_kwp
     inverter_kw = request.inverter_kw

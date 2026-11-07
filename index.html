@@ -78,7 +78,7 @@
                         <div class="flex items-center justify-between border-b border-sky-100 pb-2 mb-3">
                             <h3
                                 class="text-xs font-bold text-sky-600 uppercase tracking-wider flex items-center gap-1.5">
-                                <i class="fa-solid fa-calendar-day"></i> Tomorrow's Outlook <span
+                                <i class="fa-solid fa-calendar-day"></i> <span id="weatherOutlookHeading">Tomorrow's Outlook</span> <span
                                     id="weather_forecast_date" class="ml-1 font-medium normal-case"> </span>
                             </h3>
                             <span
@@ -136,6 +136,13 @@
                         <input type="number" step="0.1" min="0.1" max="1000" id="inverterKw" value="5.0"
                             class="block w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 sm:text-sm"
                             required>
+                    </div>
+                    <div class="mb-5">
+                        <label for="forecastDaySelect" class="block text-sm font-medium text-slate-700 mb-1">Forecast day</label>
+                        <select id="forecastDaySelect" class="block w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-teal-500 focus:border-teal-500 sm:text-sm">
+                            <option value="">Loading available days...</option>
+                        </select>
+                        <p class="mt-1 text-xs text-slate-500">Choose tomorrow or either of the following two days.</p>
                     </div>
                     <button id="predictButton" type="submit"
                         class="mt-8 w-full flex justify-center items-center gap-2 py-3 px-4 border border-transparent rounded-lg shadow-sm text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 transition-all duration-200">
@@ -339,7 +346,7 @@
         // Change to http://127.0.0.1:8000 while testing against your local backend.
         window.SOLAR_API_BASE = window.SOLAR_API_BASE || 'https://solar-predictions.onrender.com';
     </script>
-    <script src="app.js?v=results-reset-20261107"></script>
+    <script src="app.js?v=three-day-forecast-animated-reset-20261107"></script>
 </body>
 
 </html>

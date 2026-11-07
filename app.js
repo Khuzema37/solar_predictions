@@ -34,8 +34,11 @@ const WEATHER_VARIABLES = [
     'global_tilted_irradiance', 'wind_speed_10m', 'precipitation'
 ];
 
-let forecastBundle = null;
+let forecastBundle = null; // Selected day's weather bundle.
+let forecastBundles = {}; // Three daily bundles fetched together on page load.
 let forecastLoadPromise = null;
+let selectedForecastDate = null;
+const resetAnimationTimers = new WeakMap();
 
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -99,22 +102,66 @@ function dateInPakistan(date = new Date()) {
     return `${values.year}-${values.month}-${values.day}`;
 }
 
-function tomorrowInPakistan() {
-    const [year, month, day] = dateInPakistan().split('-').map(Number);
-    const date = new Date(Date.UTC(year, month - 1, day + 1));
+function addDaysToDate(dateString, days) {
+    const [year, month, day] = dateString.split('-').map(Number);
+    const date = new Date(Date.UTC(year, month - 1, day + days));
     return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, '0')}-${String(date.getUTCDate()).padStart(2, '0')}`;
 }
 
-async function fetchWeatherBundle() {
-    const targetDate = tomorrowInPakistan();
+function tomorrowInPakistan() {
+    return addDaysToDate(dateInPakistan(), 1);
+}
 
-    // Fetch site coordinates/orientation from our backend, then call Open-Meteo
-    // directly from the browser. No persistent weather cache is used.
+function forecastDateForOffset(offset) {
+    return addDaysToDate(dateInPakistan(), offset);
+}
+
+function splitThreeDayForecast(payload, startDate) {
+    if (!payload.hourly || !Array.isArray(payload.hourly.time) || !payload.daily) {
+        throw new Error('Open-Meteo returned an incomplete three-day forecast.');
+    }
+    const expectedHours = 72;
+    if (payload.hourly.time.length !== expectedHours) {
+        throw new Error(`Expected 72 hourly weather records for three days; received ${payload.hourly.time.length}.`);
+    }
+    for (const name of WEATHER_VARIABLES) {
+        if (!Array.isArray(payload.hourly[name]) || payload.hourly[name].length !== expectedHours ||
+            payload.hourly[name].some(value => value === null || !Number.isFinite(Number(value)))) {
+            throw new Error(`Three-day forecast is incomplete. Missing or invalid hourly data: ${name}`);
+        }
+    }
+    for (const field of ['temperature_2m_max', 'precipitation_sum', 'weather_code']) {
+        if (!Array.isArray(payload.daily[field]) || payload.daily[field].length < 3 ||
+            payload.daily[field].slice(0, 3).some(value => value === null || !Number.isFinite(Number(value)))) {
+            throw new Error(`Forecast is missing valid three-day data: ${field}`);
+        }
+    }
+
+    const bundles = {};
+    for (let dayIndex = 0; dayIndex < 3; dayIndex++) {
+        const date = addDaysToDate(startDate, dayIndex);
+        const from = dayIndex * 24;
+        const to = from + 24;
+        const hourly = {};
+        for (const [key, values] of Object.entries(payload.hourly)) {
+            hourly[key] = values.slice(from, to);
+        }
+        if (hourly.time.length !== 24 || hourly.time.some(value => !String(value).startsWith(date))) {
+            throw new Error(`Hourly timestamps do not match forecast date ${date}.`);
+        }
+        const daily = {};
+        for (const [key, values] of Object.entries(payload.daily)) daily[key] = [values[dayIndex]];
+        bundles[date] = { date, hourly, daily };
+    }
+    return bundles;
+}
+
+async function fetchWeatherBundles() {
+    const startDate = tomorrowInPakistan();
+    const endDate = forecastDateForOffset(3);
     const systemResponse = await fetchWithRetry(`${API_BASE}/api/system`, {}, 'Solar system configuration request');
     const system = await systemResponse.json().catch(() => ({}));
-    if (!systemResponse.ok) {
-        throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
-    }
+    if (!systemResponse.ok) throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
 
     const params = new URLSearchParams({
         latitude: system.latitude,
@@ -124,34 +171,13 @@ async function fetchWeatherBundle() {
         timezone: system.timezone || 'Asia/Karachi',
         tilt: system.tilt_degrees,
         azimuth: system.azimuth_degrees,
-        start_date: targetDate,
-        end_date: targetDate
+        start_date: startDate,
+        end_date: endDate
     });
-
-    const response = await fetchWithRetry(`https://api.open-meteo.com/v1/forecast?${params}`, {}, 'Open-Meteo forecast request');
+    const response = await fetchWithRetry(`https://api.open-meteo.com/v1/forecast?${params}`, {}, 'Open-Meteo three-day forecast request');
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok || payload.error) {
-        throw new Error(payload.reason || `Open-Meteo error ${response.status}`);
-    }
-    if (!payload.hourly || payload.hourly.time?.length !== 24 || !payload.daily) {
-        throw new Error('Open-Meteo did not return a complete 24-hour forecast.');
-    }
-
-    const missingHourly = WEATHER_VARIABLES.filter(name =>
-        !Array.isArray(payload.hourly[name]) || payload.hourly[name].length !== 24 ||
-        payload.hourly[name].some(value => value === null || !Number.isFinite(Number(value)))
-    );
-    if (missingHourly.length) {
-        throw new Error(`Forecast is incomplete. Missing or invalid hourly data: ${missingHourly.join(', ')}`);
-    }
-    for (const field of ['temperature_2m_max', 'precipitation_sum', 'weather_code']) {
-        if (!Array.isArray(payload.daily[field]) || payload.daily[field].length < 1 ||
-            !Number.isFinite(Number(payload.daily[field][0]))) {
-            throw new Error(`Forecast is missing valid daily data: ${field}`);
-        }
-    }
-
-    return { date: targetDate, hourly: payload.hourly, daily: payload.daily };
+    if (!response.ok || payload.error) throw new Error(payload.reason || `Open-Meteo error ${response.status}`);
+    return splitThreeDayForecast(payload, startDate);
 }
 
 function outlookFromBundle(bundle) {
@@ -162,45 +188,71 @@ function outlookFromBundle(bundle) {
     };
 }
 
-function ensureForecastBundle() {
-    // A single in-memory request is shared by page initialization and any retry.
-    if (forecastBundle && forecastBundle.date === tomorrowInPakistan()) {
-        return Promise.resolve(forecastBundle);
-    }
+function ensureForecastBundles() {
+    const tomorrow = tomorrowInPakistan();
+    if (forecastBundles[tomorrow] && forecastBundles[forecastDateForOffset(3)]) return Promise.resolve(forecastBundles);
     if (!forecastLoadPromise) {
-        forecastLoadPromise = fetchWeatherBundle()
-            .then(bundle => {
-                forecastBundle = bundle;
-                return bundle;
-            })
-            .catch(error => {
-                throw error;
+        forecastLoadPromise = fetchWeatherBundles()
+            .then(bundles => {
+                forecastBundles = bundles;
+                return bundles;
             })
             .finally(() => { forecastLoadPromise = null; });
     }
     return forecastLoadPromise;
 }
 
+function updateForecastDayLabels() {
+    const select = byId('forecastDaySelect');
+    if (!select) return;
+    const today = dateInPakistan();
+    const labels = ['Tomorrow', 'Day after tomorrow', 'In two days'];
+    Array.from(select.options).forEach((option, index) => {
+        const date = forecastDateForOffset(index + 1);
+        option.value = date;
+        option.textContent = `${labels[index]} (${date})`;
+    });
+    if (!select.value || !forecastBundles[select.value]) select.value = forecastDateForOffset(1);
+}
+
+function selectForecastDay(date) {
+    const bundle = forecastBundles[date];
+    if (!bundle) {
+        setText('weather_description', 'Selected day forecast unavailable');
+        setText('weather_icon', '⚠️');
+        return;
+    }
+    selectedForecastDate = date;
+    forecastBundle = bundle;
+    updateOutlook(outlookFromBundle(bundle));
+    setText('weather_forecast_date', date);
+    const outlookHeading = byId('weatherOutlookHeading');
+    if (outlookHeading) outlookHeading.textContent = date === forecastDateForOffset(1) ? 'Tomorrow’s Outlook' : `Forecast for ${date}`;
+    const buttonLabel = byId('predictButton')?.querySelector('span');
+    if (buttonLabel) buttonLabel.textContent = `Predict ${date === forecastDateForOffset(1) ? "Tomorrow's" : date === forecastDateForOffset(2) ? "Day 2's" : "Day 3's"} Generation`;
+}
+
 async function loadWeatherOnPageOpen() {
     const description = byId('weather_description');
     const icon = byId('weather_icon');
     const retryButton = byId('retryWeatherButton');
-    setText('weather_description', 'Loading tomorrow\'s forecast...');
+    setText('weather_description', 'Loading three-day forecast...');
     setText('weather_icon', '⏳');
     if (retryButton) retryButton.classList.add('hidden');
-
     try {
-        forecastBundle = await ensureForecastBundle();
-        updateOutlook(outlookFromBundle(forecastBundle));
-        const dateEl = byId('weather_forecast_date');
-        if (dateEl) dateEl.textContent = forecastBundle.date;
+        await ensureForecastBundles();
+        updateForecastDayLabels();
+        const select = byId('forecastDaySelect');
+        const initialDate = select?.value || forecastDateForOffset(1);
+        selectForecastDay(initialDate);
         if (retryButton) retryButton.classList.add('hidden');
     } catch (error) {
+        forecastBundles = {};
         forecastBundle = null;
         if (description) description.textContent = 'Forecast temporarily unavailable';
         if (icon) icon.textContent = '⚠️';
         if (retryButton) retryButton.classList.remove('hidden');
-        console.error('Unable to load weather preview:', error);
+        console.error('Unable to load three-day weather forecast:', error);
     }
 }
 
@@ -345,14 +397,44 @@ function populateSolarInsights(hourly, outlook) {
 
 
 // Daily consumption planner: compares the user's stated daily kWh with
-// tomorrow's forecast and identifies the strongest consecutive solar window.
+// the selected day's forecast and identifies the strongest consecutive solar window.
 // It intentionally does not infer exact grid import/export without an hourly load profile.
 let latestPrediction = null;
 let predictionRequestVersion = 0;
 
-function hideDailyPlanResults() {
+function animateAndHide(element, onHidden) {
+    if (!element || element.classList.contains('hidden')) {
+        if (onHidden) onHidden();
+        return;
+    }
+    const oldTimer = resetAnimationTimers.get(element);
+    if (oldTimer) clearTimeout(oldTimer);
+    element.classList.remove('results-fade-out');
+    // Force a style flush so repeated edits restart the short exit animation.
+    void element.offsetWidth;
+    element.classList.add('results-fade-out');
+    const timer = setTimeout(() => {
+        element.classList.add('hidden');
+        element.classList.remove('results-fade-out');
+        resetAnimationTimers.delete(element);
+        if (onHidden) onHidden();
+    }, 230);
+    resetAnimationTimers.set(element, timer);
+}
+
+function cancelPendingHide(element, keepHidden = false) {
+    if (!element) return;
+    const timer = resetAnimationTimers.get(element);
+    if (timer) clearTimeout(timer);
+    resetAnimationTimers.delete(element);
+    element.classList.remove('results-fade-out');
+    if (keepHidden) element.classList.add('hidden');
+}
+
+function hideDailyPlanResults(animate = true) {
     const results = byId('dailyPlanResults');
-    if (results) results.classList.add('hidden');
+    if (animate) animateAndHide(results);
+    else if (results) results.classList.add('hidden');
     setText('dailyPlanError', '');
 }
 
@@ -360,23 +442,30 @@ function resetPredictionResults() {
     // Invalidate any in-flight prediction so it cannot repopulate stale results.
     predictionRequestVersion += 1;
     latestPrediction = null;
+    const predictButton = byId('predictButton');
+    if (predictButton) predictButton.disabled = false;
+    const loader = byId('btnLoader');
+    if (loader) loader.style.display = 'none';
+    byId('btnIcon')?.classList.remove('hidden');
+    byId('apiStatusText')?.classList.add('hidden');
 
     const populated = byId('populatedState');
     const empty = byId('emptyState');
-    if (populated) {
-        populated.classList.add('hidden');
-        populated.classList.remove('flex');
-    }
-    if (empty) {
-        empty.classList.remove('hidden');
-        empty.classList.add('flex');
-    }
-
-    hideDailyPlanResults();
+    const thisResetVersion = predictionRequestVersion;
+    animateAndHide(populated, () => {
+        if (thisResetVersion !== predictionRequestVersion || latestPrediction) return;
+        if (populated) populated.classList.remove('flex');
+        if (empty) {
+            empty.classList.remove('hidden');
+            empty.classList.add('flex');
+        }
+    });
+    hideDailyPlanResults(true);
     setText('errorMessage', '');
 }
 
 function createDailyConsumptionPlan() {
+    cancelPendingHide(byId('dailyPlanResults'));
     const error = byId('dailyPlanError');
     error.textContent = '';
     const consumption = Number(byId('dailyConsumptionKwh').value);
@@ -386,7 +475,7 @@ function createDailyConsumptionPlan() {
         return;
     }
     if (!latestPrediction || !Array.isArray(latestPrediction.hourly) || latestPrediction.hourly.length !== 24) {
-        error.textContent = 'First calculate tomorrow’s solar generation using the Predict button.';
+        error.textContent = 'First calculate solar generation for the selected day using the Predict button.';
         return;
     }
 
@@ -449,6 +538,9 @@ async function runPrediction(event) {
 
     const submit = byId('predictButton');
     const requestVersion = ++predictionRequestVersion;
+    cancelPendingHide(byId('populatedState'), true);
+    const emptyState = byId('emptyState');
+    if (emptyState) { emptyState.classList.remove('hidden'); emptyState.classList.add('flex'); }
     byId('errorMessage').textContent = '';
     byId('btnLoader').style.display = 'block';
     byId('btnIcon').classList.add('hidden');
@@ -456,18 +548,22 @@ async function runPrediction(event) {
     submit.disabled = true;
 
     try {
-        if (!forecastBundle || forecastBundle.date !== tomorrowInPakistan()) {
-            throw new Error('Tomorrow\'s weather forecast is not ready. Please wait for it to load or use Retry forecast.');
+        const requestedDate = byId('forecastDaySelect')?.value || selectedForecastDate || tomorrowInPakistan();
+        const requestedBundle = forecastBundles[requestedDate];
+        if (!requestedBundle || requestedBundle.date !== requestedDate) {
+            throw new Error('The selected day\'s weather forecast is not ready. Please wait for it to load or use Retry forecast.');
         }
-        const response = await fetch(`${API_BASE}/api/predict/tomorrow`, {
+        forecastBundle = requestedBundle;
+        selectedForecastDate = requestedDate;
+        const response = await fetch(`${API_BASE}/api/predict`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 capacity_kwp: capacity,
                 inverter_kw: inverter,
-                date: forecastBundle.date,
-                hourly: forecastBundle.hourly,
-                daily: forecastBundle.daily
+                date: requestedBundle.date,
+                hourly: requestedBundle.hourly,
+                daily: requestedBundle.daily
             })
         });
         const payload = await response.json().catch(() => ({}));
@@ -499,10 +595,12 @@ async function runPrediction(event) {
         setText('errorMessage', error.message || 'Could not fetch the forecast.');
         console.error(error);
     } finally {
-        byId('btnLoader').style.display = 'none';
-        byId('btnIcon').classList.remove('hidden');
-        byId('apiStatusText').classList.add('hidden');
-        submit.disabled = false;
+        if (requestVersion === predictionRequestVersion) {
+            byId('btnLoader').style.display = 'none';
+            byId('btnIcon').classList.remove('hidden');
+            byId('apiStatusText').classList.add('hidden');
+            submit.disabled = false;
+        }
     }
 }
 
@@ -517,6 +615,7 @@ document.addEventListener('DOMContentLoaded', () => {
             retryWeatherButton.disabled = true;
             retryWeatherButton.textContent = 'Retrying...';
             forecastBundle = null;
+            forecastBundles = {};
             try {
                 await loadWeatherOnPageOpen();
             } finally {
@@ -531,6 +630,31 @@ document.addEventListener('DOMContentLoaded', () => {
     const predictionForm = byId('predictionForm');
     if (predictionForm) predictionForm.addEventListener('submit', runPrediction);
     else console.error('Missing required HTML element: #predictionForm');
+
+    const forecastDaySelect = byId('forecastDaySelect');
+    if (forecastDaySelect) {
+        forecastDaySelect.addEventListener('change', () => {
+            predictionRequestVersion += 1;
+            latestPrediction = null;
+            const predictButton = byId('predictButton');
+            if (predictButton) predictButton.disabled = false;
+            const loader = byId('btnLoader');
+            if (loader) loader.style.display = 'none';
+            byId('btnIcon')?.classList.remove('hidden');
+            byId('apiStatusText')?.classList.add('hidden');
+            const populated = byId('populatedState');
+            const empty = byId('emptyState');
+            const dayChangeVersion = predictionRequestVersion;
+            animateAndHide(populated, () => {
+                if (dayChangeVersion !== predictionRequestVersion || latestPrediction) return;
+                if (populated) populated.classList.remove('flex');
+                if (empty) { empty.classList.remove('hidden'); empty.classList.add('flex'); }
+            });
+            hideDailyPlanResults(true);
+            setText('errorMessage', '');
+            selectForecastDay(forecastDaySelect.value);
+        });
+    }
 
     // Any change to the solar system configuration invalidates the displayed
     // prediction and its dependent daily-use plan. Weather remains untouched.

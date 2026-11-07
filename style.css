@@ -193,3 +193,17 @@ body {
     .planner-table .appliance-category-input { width: 100%; max-width: none; }
     .planner-chart-wrap { height: 230px; }
 }
+
+
+/* Short exit animation when previously calculated results become stale. */
+.results-fade-out {
+    animation: resultsFadeOut 220ms ease-in forwards;
+    pointer-events: none;
+}
+@keyframes resultsFadeOut {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(8px); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .results-fade-out { animation-duration: 1ms; }
+}
