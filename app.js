@@ -33,8 +33,63 @@ const WEATHER_VARIABLES = [
     'shortwave_radiation', 'direct_normal_irradiance', 'diffuse_radiation',
     'global_tilted_irradiance', 'wind_speed_10m', 'precipitation'
 ];
+
 let forecastBundle = null;
 let forecastLoadPromise = null;
+
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+async function fetchWithRetry(url, options = {}, label = 'Weather request') {
+    const maxAttempts = 3;
+    let lastError;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+        try {
+            const response = await fetch(url, { ...options, signal: controller.signal });
+            clearTimeout(timeoutId);
+
+            if (response.ok) return response;
+
+            const retryable = response.status === 429 ||
+                [500, 502, 503, 504].includes(response.status);
+
+            if (!retryable || attempt === maxAttempts) {
+                let detail = '';
+                try {
+                    const body = await response.clone().json();
+                    detail = body.detail || body.reason || body.message || '';
+                } catch (_) {}
+                throw new Error(detail || `${label} failed (HTTP ${response.status}).`);
+            }
+
+            // Respect Retry-After when supplied; otherwise use bounded backoff.
+            const retryAfter = Number(response.headers.get('Retry-After'));
+            const waitMs = Number.isFinite(retryAfter) && retryAfter > 0
+                ? Math.min(retryAfter * 1000, 20000)
+                : (response.status === 429 ? 10000 : attempt * 2000);
+
+            console.warn(`${label}: HTTP ${response.status}; retrying in ${Math.round(waitMs / 1000)}s (attempt ${attempt + 1}/${maxAttempts}).`);
+            await sleep(waitMs);
+        } catch (error) {
+            clearTimeout(timeoutId);
+            lastError = error.name === 'AbortError'
+                ? new Error(`${label} timed out after 15 seconds.`)
+                : error;
+
+            const isHttpFinal = /HTTP \d+/.test(lastError.message);
+            if (isHttpFinal || attempt === maxAttempts) throw lastError;
+
+            const waitMs = attempt * 2000;
+            console.warn(`${label}: ${lastError.message}; retrying in ${waitMs / 1000}s (attempt ${attempt + 1}/${maxAttempts}).`);
+            await sleep(waitMs);
+        }
+    }
+
+    throw lastError || new Error(`${label} failed after ${maxAttempts} attempts.`);
+}
 
 function dateInPakistan(date = new Date()) {
     const parts = new Intl.DateTimeFormat('en-CA', {
@@ -55,7 +110,7 @@ async function fetchWeatherBundle() {
 
     // Fetch site coordinates/orientation from our backend, then call Open-Meteo
     // directly from the browser. No persistent weather cache is used.
-    const systemResponse = await fetch(`${API_BASE}/api/system`);
+    const systemResponse = await fetchWithRetry(`${API_BASE}/api/system`, {}, 'Solar system configuration request');
     const system = await systemResponse.json().catch(() => ({}));
     if (!systemResponse.ok) {
         throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
@@ -73,7 +128,7 @@ async function fetchWeatherBundle() {
         end_date: targetDate
     });
 
-    const response = await fetch(`https://api.open-meteo.com/v1/forecast?${params}`);
+    const response = await fetchWithRetry(`https://api.open-meteo.com/v1/forecast?${params}`, {}, 'Open-Meteo forecast request');
     const payload = await response.json().catch(() => ({}));
     if (!response.ok || payload.error) {
         throw new Error(payload.reason || `Open-Meteo error ${response.status}`);
@@ -142,8 +197,8 @@ async function loadWeatherOnPageOpen() {
         if (retryButton) retryButton.classList.add('hidden');
     } catch (error) {
         forecastBundle = null;
-        description.textContent = 'Forecast temporarily unavailable';
-        icon.textContent = '⚠️';
+        if (description) description.textContent = 'Forecast temporarily unavailable';
+        if (icon) icon.textContent = '⚠️';
         if (retryButton) retryButton.classList.remove('hidden');
         console.error('Unable to load weather preview:', error);
     }
