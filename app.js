@@ -205,14 +205,24 @@ function ensureForecastBundles() {
 function updateForecastDayLabels() {
     const select = byId('forecastDaySelect');
     if (!select) return;
-    const today = dateInPakistan();
+
     const labels = ['Tomorrow', 'Day after tomorrow', 'In two days'];
-    Array.from(select.options).forEach((option, index) => {
-        const date = forecastDateForOffset(index + 1);
+    const selectedBeforeRefresh = select.value;
+    select.replaceChildren();
+
+    for (let offset = 1; offset <= 3; offset++) {
+        const date = forecastDateForOffset(offset);
+        const option = document.createElement('option');
         option.value = date;
-        option.textContent = `${labels[index]} (${date})`;
-    });
-    if (!select.value || !forecastBundles[select.value]) select.value = forecastDateForOffset(1);
+        option.textContent = `${labels[offset - 1]} (${date})`;
+        option.disabled = !forecastBundles[date];
+        select.appendChild(option);
+    }
+
+    const preferredDate = selectedBeforeRefresh && forecastBundles[selectedBeforeRefresh]
+        ? selectedBeforeRefresh
+        : forecastDateForOffset(1);
+    select.value = preferredDate;
 }
 
 function selectForecastDay(date) {
@@ -403,22 +413,36 @@ let latestPrediction = null;
 let predictionRequestVersion = 0;
 
 function animateAndHide(element, onHidden) {
-    if (!element || element.classList.contains('hidden')) {
+    if (!element) {
         if (onHidden) onHidden();
         return;
     }
+
     const oldTimer = resetAnimationTimers.get(element);
     if (oldTimer) clearTimeout(oldTimer);
-    element.classList.remove('results-fade-out');
-    // Force a style flush so repeated edits restart the short exit animation.
-    void element.offsetWidth;
-    element.classList.add('results-fade-out');
-    const timer = setTimeout(() => {
+
+    const isAlreadyHidden = element.classList.contains('hidden') ||
+        window.getComputedStyle(element).display === 'none';
+    if (isAlreadyHidden) {
         element.classList.add('hidden');
+        element.style.display = 'none';
+        if (onHidden) onHidden();
+        return;
+    }
+
+    element.classList.remove('hidden');
+    element.style.display = '';
+    element.classList.remove('results-fade-out');
+    void element.offsetWidth; // restart animation after rapid consecutive edits
+    element.classList.add('results-fade-out');
+
+    const timer = setTimeout(() => {
         element.classList.remove('results-fade-out');
+        element.classList.add('hidden');
+        element.style.display = 'none';
         resetAnimationTimers.delete(element);
         if (onHidden) onHidden();
-    }, 230);
+    }, 240);
     resetAnimationTimers.set(element, timer);
 }
 
@@ -454,10 +478,15 @@ function resetPredictionResults() {
     const thisResetVersion = predictionRequestVersion;
     animateAndHide(populated, () => {
         if (thisResetVersion !== predictionRequestVersion || latestPrediction) return;
-        if (populated) populated.classList.remove('flex');
+        if (populated) {
+            populated.classList.remove('flex');
+            populated.classList.add('hidden');
+            populated.style.display = 'none';
+        }
         if (empty) {
             empty.classList.remove('hidden');
             empty.classList.add('flex');
+            empty.style.display = 'flex';
         }
     });
     hideDailyPlanResults(true);
@@ -589,8 +618,12 @@ async function runPrediction(event) {
         populateSolarInsights(payload.hourly, payload.outlook || {});
 
         byId('emptyState').classList.add('hidden');
-        byId('populatedState').classList.remove('hidden');
-        byId('populatedState').classList.add('flex');
+        byId('emptyState').style.display = 'none';
+        const populatedState = byId('populatedState');
+        cancelPendingHide(populatedState, true);
+        populatedState.classList.remove('hidden');
+        populatedState.classList.add('flex');
+        populatedState.style.display = 'flex';
     } catch (error) {
         setText('errorMessage', error.message || 'Could not fetch the forecast.');
         console.error(error);
@@ -647,8 +680,16 @@ document.addEventListener('DOMContentLoaded', () => {
             const dayChangeVersion = predictionRequestVersion;
             animateAndHide(populated, () => {
                 if (dayChangeVersion !== predictionRequestVersion || latestPrediction) return;
-                if (populated) populated.classList.remove('flex');
-                if (empty) { empty.classList.remove('hidden'); empty.classList.add('flex'); }
+                if (populated) {
+                    populated.classList.remove('flex');
+                    populated.classList.add('hidden');
+                    populated.style.display = 'none';
+                }
+                if (empty) {
+                    empty.classList.remove('hidden');
+                    empty.classList.add('flex');
+                    empty.style.display = 'flex';
+                }
             });
             hideDailyPlanResults(true);
             setText('errorMessage', '');
