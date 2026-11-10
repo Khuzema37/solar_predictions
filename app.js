@@ -159,18 +159,26 @@ function splitThreeDayForecast(payload, startDate) {
 async function fetchWeatherBundles() {
     const startDate = tomorrowInPakistan();
     const endDate = forecastDateForOffset(3);
-    const systemResponse = await fetchWithRetry(`${API_BASE}/api/system`, {}, 'Solar system configuration request');
-    const system = await systemResponse.json().catch(() => ({}));
-    if (!systemResponse.ok) throw new Error(system.detail || `Backend configuration error ${systemResponse.status}`);
+
+    // Browser-side weather configuration. Keep these defaults synchronized with
+    // main.py (LATITUDE, LONGITUDE, TZ, TILT and AZIMUTH). This deliberately
+    // avoids calling Render /api/system while the free service is waking up.
+    const weatherConfig = {
+        latitude: 29.3956,
+        longitude: 71.6836,
+        timezone: 'Asia/Karachi',
+        tilt: 30,
+        azimuth: 0
+    };
 
     const params = new URLSearchParams({
-        latitude: system.latitude,
-        longitude: system.longitude,
+        latitude: weatherConfig.latitude,
+        longitude: weatherConfig.longitude,
         hourly: WEATHER_VARIABLES.join(','),
         daily: 'temperature_2m_max,precipitation_sum,weather_code',
-        timezone: system.timezone || 'Asia/Karachi',
-        tilt: system.tilt_degrees,
-        azimuth: system.azimuth_degrees,
+        timezone: weatherConfig.timezone,
+        tilt: weatherConfig.tilt,
+        azimuth: weatherConfig.azimuth,
         start_date: startDate,
         end_date: endDate
     });
@@ -205,14 +213,23 @@ function ensureForecastBundles() {
 function updateForecastDayLabels() {
     const select = byId('forecastDaySelect');
     if (!select) return;
-    const today = dateInPakistan();
     const labels = ['Tomorrow', 'Day after tomorrow', 'In two days'];
-    Array.from(select.options).forEach((option, index) => {
-        const date = forecastDateForOffset(index + 1);
+    const dates = [1, 2, 3].map(offset => forecastDateForOffset(offset));
+
+    // Rebuild the options instead of assuming the HTML already contains three.
+    select.replaceChildren();
+    dates.forEach((date, index) => {
+        const option = document.createElement('option');
         option.value = date;
         option.textContent = `${labels[index]} (${date})`;
+        select.appendChild(option);
     });
-    if (!select.value || !forecastBundles[select.value]) select.value = forecastDateForOffset(1);
+
+    const preferredDate = selectedForecastDate && forecastBundles[selectedForecastDate]
+        ? selectedForecastDate
+        : dates[0];
+    select.value = preferredDate;
+    select.disabled = false;
 }
 
 function selectForecastDay(date) {
@@ -577,20 +594,17 @@ async function exportThreeDayForecast() {
             Day: ['Tomorrow', 'Day 2', 'Day 3'][index],
             Date: p.date,
             'Predicted generation (kWh)': Number(p.total_daily_kwh),
-            'Physics estimate (kWh)': Number(p.physics_total_kwh),
             'Maximum temperature (°C)': Number(p.outlook?.max_temperature_c),
             'Precipitation (mm)': Number(p.outlook?.precipitation_mm),
             'Weather code': Number(p.outlook?.weather_code),
             'Panel capacity (kWp)': capacity,
-            'Inverter capacity (kW)': inverter,
-            'Prediction method': p.method,
-            'Method notes': p.method_note
+            'Inverter capacity (kW)': inverter
         }));
         const workbook = XLSX.utils.book_new();
         const summarySheet = XLSX.utils.json_to_sheet(summaryRows);
         summarySheet['!cols'] = [
-            { wch: 14 }, { wch: 14 }, { wch: 25 }, { wch: 23 }, { wch: 25 },
-            { wch: 19 }, { wch: 14 }, { wch: 20 }, { wch: 21 }, { wch: 28 }, { wch: 85 }
+            { wch: 14 }, { wch: 14 }, { wch: 25 }, { wch: 25 },
+            { wch: 19 }, { wch: 14 }, { wch: 20 }, { wch: 21 }
         ];
         XLSX.utils.book_append_sheet(workbook, summarySheet, '3-Day Summary');
 
@@ -600,7 +614,6 @@ async function exportThreeDayForecast() {
                 Date: p.date,
                 Time: hour.time.slice(11, 16),
                 'Predicted generation (kWh)': Number(hour.predicted_energy_kwh),
-                'Physics estimate (kWh)': Number(hour.physics_energy_kwh),
                 'GTI (W/m²)': Number(hour.irradiance_w_m2),
                 'Temperature (°C)': Number(hour.temperature_c),
                 'Cloud cover (%)': Number(hour.cloud_cover_pct),
@@ -610,7 +623,7 @@ async function exportThreeDayForecast() {
             }));
             const sheet = XLSX.utils.json_to_sheet(rows);
             sheet['!cols'] = [
-                { wch: 14 }, { wch: 10 }, { wch: 28 }, { wch: 23 }, { wch: 15 },
+                { wch: 14 }, { wch: 10 }, { wch: 28 }, { wch: 15 },
                 { wch: 18 }, { wch: 17 }, { wch: 25 }, { wch: 22 }, { wch: 22 }
             ];
             XLSX.utils.book_append_sheet(workbook, sheet, ['Tomorrow', 'Day 2', 'Day 3'][index]);
